@@ -2,41 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Uno Game Design System - Dark theme with vibrant card colors */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Dark theme base colors */
+    --background: 222 84% 5%;
+    --foreground: 210 40% 98%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 222 84% 8%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 222 84% 8%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 212 27% 84%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
+
+    /* Uno card colors */
+    --uno-red: 0 85% 55%;
+    --uno-blue: 210 100% 50%;
+    --uno-green: 120 60% 45%;
+    --uno-yellow: 48 100% 60%;
+    
+    /* Game table colors */
+    --game-table: 222 84% 6%;
+    --game-table-border: 217 33% 20%;
+    --game-felt: linear-gradient(135deg, hsl(222 84% 6%), hsl(222 84% 8%));
+    
+    /* Card shadows and effects */
+    --card-shadow: 0 10px 25px -5px hsl(222 84% 4% / 0.3);
+    --card-shadow-hover: 0 20px 35px -5px hsl(222 84% 4% / 0.5);
+    --card-glow: 0 0 20px hsl(var(--primary) / 0.3);
+    
+    /* Animation values */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 
     --sidebar-background: 0 0% 98%;
 
@@ -101,5 +120,81 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  /* Uno Card Components */
+  .uno-card {
+    @apply rounded-lg border-2 border-black shadow-[var(--card-shadow)] 
+           transition-[var(--transition-smooth)] cursor-pointer relative;
+  }
+  
+  .uno-card:hover {
+    @apply shadow-[var(--card-shadow-hover)] scale-105;
+  }
+  
+  .uno-card-red {
+    background: hsl(var(--uno-red));
+  }
+  
+  .uno-card-blue {
+    background: hsl(var(--uno-blue));
+  }
+  
+  .uno-card-green {
+    background: hsl(var(--uno-green));
+  }
+  
+  .uno-card-yellow {
+    background: hsl(var(--uno-yellow));
+  }
+  
+  .uno-card-wild {
+    background: linear-gradient(135deg, 
+      hsl(var(--uno-red)), 
+      hsl(var(--uno-yellow)), 
+      hsl(var(--uno-green)), 
+      hsl(var(--uno-blue))
+    );
+  }
+  
+  /* Game Table */
+  .game-table {
+    background: var(--game-felt);
+    @apply border-[var(--game-table-border)] shadow-2xl;
+  }
+  
+  /* Player Highlight */
+  .player-active {
+    @apply ring-2 ring-primary scale-105 shadow-[var(--card-glow)];
+    transition: var(--transition-bounce);
+  }
+  
+  /* UNO Animation */
+  .uno-announcement {
+    @apply text-6xl font-bold text-red-500 animate-pulse;
+    text-shadow: 0 0 20px hsl(var(--uno-red));
+  }
+  
+  /* Card Flip Animation */
+  .card-flip {
+    animation: cardFlip 0.6s ease-in-out;
+  }
+  
+  @keyframes cardFlip {
+    0% { transform: rotateY(0deg); }
+    50% { transform: rotateY(90deg); }
+    100% { transform: rotateY(0deg); }
+  }
+  
+  /* Smooth fade in */
+  .fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 }
