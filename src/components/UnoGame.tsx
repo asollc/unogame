@@ -741,45 +741,49 @@ export default function UnoGame() {
       <div className="flex-1 flex flex-col justify-center">
         {/* Responsive play area */}
         <div className="relative w-full max-w-lg mx-auto">
-          {/* Players around the table - responsive circle */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 bg-gradient-to-br from-amber-800 via-amber-700 to-amber-900 shadow-2xl border-4 border-amber-900" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}>
-              {/* Player positions with highlighting */}
-              {playersInOrder.map((player) => {
-                let positionClasses = ''
-                switch (player.position) {
-                  case 0: // bottom (human)
-                    positionClasses = 'bottom-2 left-1/2 transform -translate-x-1/2'
-                    break
-                  case 1: // left
-                    positionClasses = 'left-2 top-1/2 transform -translate-y-1/2'
-                    break
-                  case 2: // top
-                    positionClasses = 'top-2 left-1/2 transform -translate-x-1/2'
-                    break
-                  case 3: // right
-                    positionClasses = 'right-2 top-1/2 transform -translate-y-1/2'
-                    break
-                }
+          {/* Players in hexagon pattern */}
+          <div className="relative w-80 h-80 sm:w-96 sm:h-96 mx-auto">
+            {/* Player positions in hexagon pattern */}
+            {playersInOrder.map((player) => {
+              let positionClasses = ''
+              let transform = ''
+              
+              switch (player.position) {
+                case 0: // bottom (human)
+                  positionClasses = 'absolute bottom-0 left-1/2'
+                  transform = 'translate(-50%, 0)'
+                  break
+                case 1: // bottom-left
+                  positionClasses = 'absolute bottom-1/4 left-0'
+                  transform = 'translate(0, 0)'
+                  break
+                case 2: // top
+                  positionClasses = 'absolute top-0 left-1/2'
+                  transform = 'translate(-50%, 0)'
+                  break
+                case 3: // bottom-right
+                  positionClasses = 'absolute bottom-1/4 right-0'
+                  transform = 'translate(0, 0)'
+                  break
+              }
 
-                return (
-                  <div key={player.id} className={`absolute ${positionClasses} text-center`}>
-                    <div className={`bg-card rounded-lg p-1 sm:p-2 shadow-lg transition-all border ${player.id === currentPlayer.id ? 'player-active' : ''}`}>
-                      <div className="text-xs sm:text-sm font-bold">{player.name}</div>
-                      <div className="text-[10px] sm:text-xs text-muted-foreground">{player.hand.length} cards</div>
-                      {!player.isHuman && (
-                        <div className="flex justify-center mt-0.5 sm:mt-1">
-                          {player.hand.slice(0, 3).map((_, i) => (
-                            <div key={i} className="w-2 h-3 sm:w-3 sm:h-4 bg-muted rounded-sm -ml-0.5 sm:-ml-1 border" />
-                          ))}
-                          {player.hand.length > 3 && <span className="text-[8px] sm:text-xs ml-0.5 sm:ml-1 text-muted-foreground">+{player.hand.length - 3}</span>}
-                        </div>
-                      )}
-                    </div>
+              return (
+                <div key={player.id} className={`${positionClasses} text-center`} style={{transform}}>
+                  <div className={`bg-card rounded-lg p-2 sm:p-3 shadow-lg transition-all border ${player.id === currentPlayer.id ? 'player-active' : ''}`}>
+                    <div className="text-sm sm:text-base font-bold">{player.name}</div>
+                    <div className="text-xs sm:text-sm text-muted-foreground">{player.hand.length} cards</div>
+                    {!player.isHuman && (
+                      <div className="flex justify-center mt-1 sm:mt-2">
+                        {player.hand.slice(0, Math.min(5, player.hand.length)).map((_, i) => (
+                          <div key={i} className="w-3 h-4 sm:w-4 sm:h-5 bg-muted rounded-sm -ml-0.5 sm:-ml-1 border shadow-sm" />
+                        ))}
+                        {player.hand.length > 5 && <span className="text-xs ml-1 text-muted-foreground">+{player.hand.length - 5}</span>}
+                      </div>
+                    )}
                   </div>
-                )
-              })}
-            </div>
+                </div>
+              )
+            })}
           </div>
 
           {/* Game area - centered */}
