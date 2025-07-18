@@ -743,7 +743,7 @@ export default function UnoGame() {
         <div className="relative w-full max-w-lg mx-auto">
           {/* Players around the table - responsive circle */}
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 game-table rounded-full">
+            <div className="w-64 h-64 sm:w-80 sm:h-80 md:w-96 md:h-96 bg-gradient-to-br from-amber-800 via-amber-700 to-amber-900 shadow-2xl border-4 border-amber-900" style={{clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)'}}>
               {/* Player positions with highlighting */}
               {playersInOrder.map((player) => {
                 let positionClasses = ''
