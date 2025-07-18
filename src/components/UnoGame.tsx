@@ -740,10 +740,10 @@ export default function UnoGame() {
 
       <div className="flex-1 flex flex-col justify-center">
         {/* Responsive play area */}
-        <div className="relative w-full max-w-lg mx-auto">
-          {/* Players in hexagon pattern */}
-          <div className="relative w-80 h-80 sm:w-96 sm:h-96 mx-auto">
-            {/* Player positions in hexagon pattern */}
+        <div className="relative w-full max-w-md mx-auto">
+          {/* Game area with players in hexagon around center */}
+          <div className="relative w-64 h-64 sm:w-80 sm:h-80 mx-auto">
+            {/* Players in hexagon pattern around center */}
             {playersInOrder.map((player) => {
               let positionClasses = ''
               let transform = ''
@@ -755,7 +755,7 @@ export default function UnoGame() {
                   break
                 case 1: // bottom-left
                   positionClasses = 'absolute bottom-1/4 left-0'
-                  transform = 'translate(0, 0)'
+                  transform = 'translate(-25%, 0)'
                   break
                 case 2: // top
                   positionClasses = 'absolute top-0 left-1/2'
@@ -763,48 +763,46 @@ export default function UnoGame() {
                   break
                 case 3: // bottom-right
                   positionClasses = 'absolute bottom-1/4 right-0'
-                  transform = 'translate(0, 0)'
+                  transform = 'translate(25%, 0)'
                   break
               }
 
               return (
                 <div key={player.id} className={`${positionClasses} text-center`} style={{transform}}>
-                  <div className={`bg-card rounded-lg p-2 sm:p-3 shadow-lg transition-all border ${player.id === currentPlayer.id ? 'player-active' : ''}`}>
-                    <div className="text-sm sm:text-base font-bold">{player.name}</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">{player.hand.length} cards</div>
-                    {!player.isHuman && (
-                      <div className="flex justify-center mt-1 sm:mt-2">
-                        {player.hand.slice(0, Math.min(5, player.hand.length)).map((_, i) => (
-                          <div key={i} className="w-3 h-4 sm:w-4 sm:h-5 bg-muted rounded-sm -ml-0.5 sm:-ml-1 border shadow-sm" />
-                        ))}
-                        {player.hand.length > 5 && <span className="text-xs ml-1 text-muted-foreground">+{player.hand.length - 5}</span>}
-                      </div>
-                    )}
+                  <div className={`bg-card rounded-lg p-2 shadow-lg transition-all border ${player.id === currentPlayer.id ? 'player-active' : ''}`}>
+                    <div className="text-xs font-bold">{player.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{player.hand.length} cards</div>
+                    <div className="flex justify-center mt-1">
+                      {player.hand.slice(0, Math.min(4, player.hand.length)).map((_, i) => (
+                        <div key={i} className="w-2 h-3 bg-muted rounded-sm -ml-0.5 border shadow-sm" />
+                      ))}
+                      {player.hand.length > 4 && <span className="text-[8px] ml-1 text-muted-foreground">+{player.hand.length - 4}</span>}
+                    </div>
                   </div>
                 </div>
               )
             })}
-          </div>
 
-          {/* Game area - centered */}
-          <div className="relative z-10 flex flex-col items-center justify-center h-64 sm:h-80 md:h-96">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              {/* Draw Pile */}
-              <div className="text-center">
-                <div className="w-12 h-16 sm:w-14 sm:h-20 md:w-16 md:h-24 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg flex items-center justify-center text-white font-bold shadow-lg border border-black">
-                  <div className="text-center">
-                    <div className="text-sm sm:text-base">{game.drawPile.length}</div>
-                    <div className="text-[10px] sm:text-xs">Cards</div>
+            {/* Central card area */}
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+              <div className="flex items-center space-x-3">
+                {/* Draw Pile */}
+                <div className="text-center">
+                  <div className="w-12 h-16 bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg flex items-center justify-center text-white font-bold shadow-lg border border-black">
+                    <div className="text-center">
+                      <div className="text-xs">{game.drawPile.length}</div>
+                      <div className="text-[8px]">Cards</div>
+                    </div>
                   </div>
+                  <Button onClick={drawCard} disabled={!currentPlayer.isHuman} className="mt-1 text-[8px] px-1 py-0.5 h-auto">
+                    Draw
+                  </Button>
                 </div>
-                <Button onClick={drawCard} disabled={!currentPlayer.isHuman} className="mt-1 sm:mt-2 text-[10px] sm:text-xs px-2 py-1">
-                  Draw
-                </Button>
-              </div>
 
-              {/* Discard Pile */}
-              <div className="text-center">
-                {renderCard(topCard)}
+                {/* Discard Pile */}
+                <div className="text-center">
+                  {renderCard(topCard, undefined, undefined, true)}
+                </div>
               </div>
             </div>
           </div>
