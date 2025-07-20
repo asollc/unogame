@@ -14,7 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      games: {
+        Row: {
+          created_at: string
+          current_color: string
+          current_player_index: number
+          direction: number
+          discard_pile: Json
+          draw_count: number
+          draw_pile: Json
+          game_state: string
+          host_id: string
+          id: string
+          invite_code: string
+          last_played_card: Json | null
+          max_players: number
+          pending_wild_card: Json | null
+          play_history: Json
+          updated_at: string
+          winner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_color?: string
+          current_player_index?: number
+          direction?: number
+          discard_pile?: Json
+          draw_count?: number
+          draw_pile?: Json
+          game_state?: string
+          host_id: string
+          id?: string
+          invite_code: string
+          last_played_card?: Json | null
+          max_players: number
+          pending_wild_card?: Json | null
+          play_history?: Json
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_color?: string
+          current_player_index?: number
+          direction?: number
+          discard_pile?: Json
+          draw_count?: number
+          draw_pile?: Json
+          game_state?: string
+          host_id?: string
+          id?: string
+          invite_code?: string
+          last_played_card?: Json | null
+          max_players?: number
+          pending_wild_card?: Json | null
+          play_history?: Json
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Relationships: []
+      }
+      players: {
+        Row: {
+          game_id: string
+          hand: Json
+          id: string
+          is_host: boolean
+          joined_at: string
+          name: string
+          player_id: string
+          position: number
+        }
+        Insert: {
+          game_id: string
+          hand?: Json
+          id?: string
+          is_host?: boolean
+          joined_at?: string
+          name: string
+          player_id: string
+          position: number
+        }
+        Update: {
+          game_id?: string
+          hand?: Json
+          id?: string
+          is_host?: boolean
+          joined_at?: string
+          name?: string
+          player_id?: string
+          position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
