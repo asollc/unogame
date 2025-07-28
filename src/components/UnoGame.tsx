@@ -236,17 +236,19 @@ export default function UnoGame() {
       firstCard = deck.pop()!
     }
 
+    const gameInsert = {
+      host_id: playerId,
+      invite_code: inviteCode,
+      max_players: maxPlayers,
+      draw_pile: deck as any,
+      discard_pile: [firstCard] as any,
+      current_color: firstCard.color === 'wild' ? 'red' : firstCard.color,
+      play_history: [{ player: 'Game Start', action: `${firstCard.color} ${firstCard.type === 'number' ? firstCard.value : firstCard.type}` }] as any
+    }
+    
     const { data: gameData, error } = await supabase
       .from('games')
-      .insert({
-        host_id: playerId,
-        invite_code: inviteCode,
-        max_players: maxPlayers,
-        draw_pile: deck,
-        discard_pile: [firstCard],
-        current_color: firstCard.color === 'wild' ? 'red' : firstCard.color,
-        play_history: [{ player: 'Game Start', action: `${firstCard.color} ${firstCard.type === 'number' ? firstCard.value : firstCard.type}` }]
-      })
+      .insert(gameInsert)
       .select()
       .single()
 
