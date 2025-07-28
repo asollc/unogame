@@ -277,6 +277,82 @@ export default function UnoGame() {
     setGameState('waiting')
   }
 
+  const createGameWithBots = async () => {
+    if (!playerName.trim()) return
+
+    const deck = shuffleDeck(generateDeck())
+    const inviteCode = generateInviteCode()
+    
+    // Deal cards for all players (human + bots)
+    const allHands: UnoCard[][] = []
+    for (let i = 0; i < maxPlayers; i++) {
+      allHands.push(deck.splice(0, 7))
+    }
+    
+    // First card on discard pile
+    let firstCard = deck.pop()!
+    while (firstCard.type === 'wild4') {
+      deck.push(firstCard)
+      deck.sort(() => Math.random() - 0.5)
+      firstCard = deck.pop()!
+    }
+
+    const gameInsert = {
+      host_id: playerId,
+      invite_code: inviteCode,
+      max_players: maxPlayers,
+      draw_pile: deck as any,
+      discard_pile: [firstCard] as any,
+      current_color: firstCard.color === 'wild' ? 'red' : firstCard.color,
+      game_state: 'playing',
+      play_history: [{ player: 'Game Start', action: `${firstCard.color} ${firstCard.type === 'number' ? firstCard.value : firstCard.type}` }] as any
+    }
+    
+    const { data: gameData, error } = await supabase
+      .from('games')
+      .insert(gameInsert)
+      .select()
+      .single()
+
+    if (error) {
+      toast({
+        title: "Error creating game",
+        description: error.message,
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Add human player
+    await supabase
+      .from('players')
+      .insert({
+        game_id: gameData.id,
+        player_id: playerId,
+        name: playerName,
+        hand: allHands[0] as any,
+        position: 0,
+        is_host: true
+      })
+
+    // Add bot players
+    for (let i = 1; i < maxPlayers; i++) {
+      await supabase
+        .from('players')
+        .insert({
+          game_id: gameData.id,
+          player_id: `bot-${i}`,
+          name: `Bot ${i}`,
+          hand: allHands[i] as any,
+          position: i,
+          is_host: false
+        })
+    }
+
+    await loadGame(gameData.id)
+    setGameState('playing')
+  }
+
   const joinGame = async () => {
     if (!playerName.trim() || !inviteCode) return
 
@@ -501,6 +577,10 @@ export default function UnoGame() {
             <Button onClick={createGame} className="w-full" disabled={!playerName.trim()}>
               Create Game
             </Button>
+            
+            <Button onClick={() => createGameWithBots()} className="w-full" disabled={!playerName.trim()} variant="outline">
+              Play with Bots
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -664,7 +744,7 @@ export default function UnoGame() {
       {/* Game area */}
       <div className="flex-1 relative">
         {/* Center area with deck and discard pile */}
-        {gameState === 'playing' && topCard && (
+        {topCard && (gameState === 'playing' || gameState === 'waiting') && (
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center space-x-4">
             <div className="text-center">
               <div className="w-12 h-16 sm:w-14 sm:h-20 bg-gradient-to-br from-gray-700 to-gray-800 rounded-xl flex items-center justify-center text-white font-bold shadow-lg border-2 border-dashed border-gray-600">
@@ -713,7 +793,7 @@ export default function UnoGame() {
       </div>
 
       {/* My hand */}
-      {myPlayer && gameState === 'playing' && (
+      {myPlayer && (gameState === 'playing' || gameState === 'waiting') && (
         <div className="mt-2 sm:mt-4">
           <Card className="bg-gray-800 border-gray-700">
             <CardHeader className="py-2 sm:py-3">
