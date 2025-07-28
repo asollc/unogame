@@ -437,6 +437,205 @@ export default function UnoGame() {
     })
   }
 
+  // Check if a card can be played
+  const canPlayCard = (card: UnoCard): boolean => {
+    if (!topCard || !game) return false
+    
+    // Wild cards can always be played
+    if (card.color === 'wild') return true
+    
+    // Card matches color or type/value
+    return card.color === game.currentColor || 
+           (card.type === topCard.type && card.type !== 'wild') ||
+           (card.type === 'number' && topCard.type === 'number' && card.value === topCard.value)
+  }
+
+  // Play a card
+  const playCard = async (card: UnoCard, cardIndex: number) => {
+    if (!game || !myPlayer || gameState !== 'playing') return
+    
+    // Check if it's the player's turn
+    if (game.currentPlayerIndex !== myPlayer.position) {
+      toast({
+        title: "Not your turn",
+        description: "Wait for your turn to play",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Check if card can be played
+    if (!canPlayCard(card)) {
+      toast({
+        title: "Invalid card",
+        description: "This card cannot be played",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // Remove card from player's hand
+      const newHand = [...myPlayer.hand]
+      newHand.splice(cardIndex, 1)
+
+      // Update player's hand
+      await supabase
+        .from('players')
+        .update({ hand: newHand as any })
+        .eq('game_id', game.id)
+        .eq('player_id', playerId)
+
+      // Handle wild cards
+      let newColor = card.color
+      if (card.color === 'wild') {
+        // For now, automatically choose red (could be enhanced with color picker)
+        newColor = 'red'
+      }
+
+      // Calculate next player index
+      let nextPlayerIndex = game.currentPlayerIndex
+      let direction = game.direction
+
+      // Handle special cards
+      if (card.type === 'reverse') {
+        direction = direction * -1
+      }
+      
+      if (card.type === 'skip' || card.type === 'draw2') {
+        // Skip next player
+        nextPlayerIndex = (nextPlayerIndex + direction + game.players.length) % game.players.length
+      }
+      
+      // Move to next player
+      nextPlayerIndex = (nextPlayerIndex + direction + game.players.length) % game.players.length
+
+      // Handle draw cards
+      if (card.type === 'draw2' || card.type === 'wild4') {
+        const drawCount = card.type === 'draw2' ? 2 : 4
+        const targetPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length
+        const targetPlayer = game.players[targetPlayerIndex]
+        
+        if (targetPlayer) {
+          const targetHand = [...targetPlayer.hand]
+          const newDrawPile = [...game.drawPile]
+          
+          // Draw cards for target player
+          for (let i = 0; i < drawCount; i++) {
+            if (newDrawPile.length > 0) {
+              targetHand.push(newDrawPile.pop()!)
+            }
+          }
+          
+          // Update target player's hand
+          await supabase
+            .from('players')
+            .update({ hand: targetHand as any })
+            .eq('game_id', game.id)
+            .eq('player_id', targetPlayer.id)
+        }
+      }
+
+      // Update game state
+      const newDiscardPile = [...game.discardPile, card]
+      const newPlayHistory = [...game.playHistory, {
+        player: myPlayer.name,
+        action: `${card.color} ${card.type === 'number' ? card.value : card.type}`
+      }]
+
+      await supabase
+        .from('games')
+        .update({
+          discard_pile: newDiscardPile as any,
+          current_color: newColor,
+          current_player_index: nextPlayerIndex,
+          direction: direction,
+          play_history: newPlayHistory as any,
+          last_played_card: card as any,
+          winner_id: newHand.length === 0 ? playerId : null,
+          game_state: newHand.length === 0 ? 'ended' : 'playing'
+        })
+        .eq('id', game.id)
+
+      // Show win message
+      if (newHand.length === 0) {
+        toast({
+          title: "Congratulations!",
+          description: "You won the game!",
+        })
+      }
+
+    } catch (error) {
+      console.error('Error playing card:', error)
+      toast({
+        title: "Error",
+        description: "Failed to play card",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Draw card
+  const drawCard = async () => {
+    if (!game || !myPlayer || gameState !== 'playing') return
+    
+    // Check if it's the player's turn
+    if (game.currentPlayerIndex !== myPlayer.position) {
+      toast({
+        title: "Not your turn",
+        description: "Wait for your turn to draw",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const newDrawPile = [...game.drawPile]
+      const newHand = [...myPlayer.hand]
+      
+      if (newDrawPile.length === 0) {
+        toast({
+          title: "No cards left",
+          description: "The draw pile is empty",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Draw a card
+      const drawnCard = newDrawPile.pop()!
+      newHand.push(drawnCard)
+
+      // Update player's hand
+      await supabase
+        .from('players')
+        .update({ hand: newHand as any })
+        .eq('game_id', game.id)
+        .eq('player_id', playerId)
+
+      // Move to next player
+      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length
+
+      // Update game state
+      await supabase
+        .from('games')
+        .update({
+          draw_pile: newDrawPile as any,
+          current_player_index: nextPlayerIndex,
+          draw_count: game.drawCount + 1
+        })
+        .eq('id', game.id)
+
+    } catch (error) {
+      console.error('Error drawing card:', error)
+      toast({
+        title: "Error",
+        description: "Failed to draw card",
+        variant: "destructive"
+      })
+    }
+  }
+
   // Get card color classes
   const getCardColorClasses = (color: CardColor) => {
     switch (color) {
@@ -465,11 +664,17 @@ export default function UnoGame() {
     const textSize = isSmall ? 'text-[10px]' : 'text-xs sm:text-base'
     const cornerSize = isSmall ? 'text-[8px]' : 'text-[10px] sm:text-xs'
     
+    // Check if card is playable
+    const isPlayable = onClick && canPlayCard(card)
+    const isMyTurn = game && myPlayer && game.currentPlayerIndex === myPlayer.position
+    
     return (
       <div
         key={card.id}
-        className={`${size} rounded border border-black flex flex-col justify-between p-0.5 cursor-pointer hover:scale-105 transition-transform ${getCardColorClasses(card.color)} ${onClick ? 'hover:shadow-lg' : ''} relative shadow-lg`}
-        onClick={onClick}
+        className={`${size} rounded border border-black flex flex-col justify-between p-0.5 transition-all duration-200 ${getCardColorClasses(card.color)} relative shadow-lg ${
+          onClick ? (isPlayable && isMyTurn ? 'cursor-pointer hover:scale-105 hover:shadow-xl ring-2 ring-yellow-400' : 'cursor-not-allowed opacity-60') : 'cursor-default'
+        }`}
+        onClick={onClick && isPlayable && isMyTurn ? onClick : undefined}
       >
         <div className={`absolute top-0.5 left-0.5 ${cornerSize} font-bold text-white`}>
           {card.type === 'number' ? card.value : 
@@ -753,7 +958,11 @@ export default function UnoGame() {
                   <div className="text-[10px]">Cards</div>
                 </div>
               </div>
-              <Button className="mt-1 text-[10px] px-2 py-1">
+              <Button 
+                className="mt-1 text-[10px] px-2 py-1" 
+                onClick={drawCard}
+                disabled={!game || !myPlayer || gameState !== 'playing' || game.currentPlayerIndex !== myPlayer.position}
+              >
                 Draw
               </Button>
             </div>
@@ -804,7 +1013,7 @@ export default function UnoGame() {
                 <div className={`flex gap-1 sm:gap-2 ${myPlayer.hand.length > 7 ? 'min-w-max' : ''}`}>
                   {myPlayer.hand.map((card, index) => (
                     <div key={`${card.id}-${index}`} className="flex-shrink-0">
-                      {renderCard(card)}
+                      {renderCard(card, index, () => playCard(card, index))}
                     </div>
                   ))}
                 </div>
