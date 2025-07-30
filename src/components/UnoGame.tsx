@@ -96,6 +96,23 @@ function generateInviteCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
 
+// Data validation helpers
+function isValidUnoCard(obj: any): obj is UnoCard {
+  return obj && typeof obj === 'object' && 
+         typeof obj.id === 'string' && 
+         typeof obj.color === 'string' && 
+         typeof obj.type === 'string'
+}
+
+function validateUnoCards(data: any): UnoCard[] {
+  if (!Array.isArray(data)) return []
+  return data.filter(isValidUnoCard)
+}
+
+function validateUnoCard(data: any): UnoCard | null {
+  return isValidUnoCard(data) ? data : null
+}
+
 function getColorClasses(color: CardColor): string {
   const baseClasses = "border-2 border-white"
   switch (color) {
@@ -265,24 +282,24 @@ export default function UnoGame() {
         maxPlayers: gameData.max_players,
         currentPlayerIndex: gameData.current_player_index,
         direction: gameData.direction as 1 | -1,
-        drawPile: (gameData.draw_pile as unknown as UnoCard[]) || [],
-        discardPile: (gameData.discard_pile as unknown as UnoCard[]) || [],
+        drawPile: validateUnoCards(gameData.draw_pile),
+        discardPile: validateUnoCards(gameData.discard_pile),
         currentColor: gameData.current_color as CardColor,
         drawCount: gameData.draw_count,
-        lastPlayedCard: gameData.last_played_card as unknown as UnoCard,
-        playHistory: (gameData.play_history as unknown as { player: string; action: string }[]) || [],
+        lastPlayedCard: validateUnoCard(gameData.last_played_card),
+        playHistory: Array.isArray(gameData.play_history) ? gameData.play_history as { player: string; action: string }[] : [],
         gameState: gameData.game_state,
         winnerId: gameData.winner_id,
-        selectedCards: (gameData.selected_cards as unknown as UnoCard[]) || [],
+        selectedCards: validateUnoCards(gameData.selected_cards),
         stackingTimer: gameData.stacking_timer,
         pendingDrawTotal: gameData.pending_draw_total || 0,
         pendingDrawType: gameData.pending_draw_type,
-        stackedDiscard: (gameData.stacked_discard as unknown as UnoCard[]) || [],
+        stackedDiscard: validateUnoCards(gameData.stacked_discard),
         expandedHandPlayer: gameData.expanded_hand_player,
         players: playersData.map(p => ({
           id: p.player_id,
           name: p.name,
-          hand: (p.hand as unknown as UnoCard[]) || [],
+          hand: validateUnoCards(p.hand),
           position: p.position,
           isHost: p.is_host
         }))
@@ -791,7 +808,7 @@ export default function UnoGame() {
         .from('games')
         .update({
           draw_pile: [
-            ...(gameData.draw_pile as unknown as UnoCard[]).slice(0, -7),
+            ...validateUnoCards(gameData.draw_pile).slice(0, -7),
             ...deck
           ] as any
         })
