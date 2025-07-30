@@ -970,31 +970,7 @@ export default function UnoGame() {
 
   // Main game screen - show console log for debugging
   console.log('About to render, gameState:', gameState, 'game:', game)
-  if (!game && gameState !== 'lobby' && gameState !== 'joining') return null
-
-  const currentPlayer = game.players[game.currentPlayerIndex]
-  const myPlayer = game.players.find(p => p.id === playerId)
-  const topCard = game.discardPile[game.discardPile.length - 1]
-  const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color
-  const lastMove = game.playHistory[game.playHistory.length - 1]
-
-  // Create placeholder players for empty slots
-  const allSlots = []
-  for (let i = 0; i < game.maxPlayers; i++) {
-    const existingPlayer = game.players.find(p => p.position === i)
-    if (existingPlayer) {
-      allSlots.push(existingPlayer)
-    } else {
-      allSlots.push({
-        id: `placeholder-${i}`,
-        name: `Player ${i + 1}`,
-        hand: [],
-        position: i,
-        isHost: false
-      })
-    }
-  }
-
+  
   // Show appropriate UI based on game state
   if (gameState === 'lobby') {
     return (
@@ -1097,6 +1073,32 @@ export default function UnoGame() {
         </div>
       </div>
     )
+  }
+
+  // If we get here, game must exist
+  if (!game) return null
+
+  const currentPlayer = game.players[game.currentPlayerIndex]
+  const myPlayer = game.players.find(p => p.id === playerId)
+  const topCard = game.discardPile[game.discardPile.length - 1]
+  const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color
+  const lastMove = game.playHistory[game.playHistory.length - 1]
+
+  // Create placeholder players for empty slots
+  const allSlots = []
+  for (let i = 0; i < game.maxPlayers; i++) {
+    const existingPlayer = game.players.find(p => p.position === i)
+    if (existingPlayer) {
+      allSlots.push(existingPlayer)
+    } else {
+      allSlots.push({
+        id: `placeholder-${i}`,
+        name: `Player ${i + 1}`,
+        hand: [],
+        position: i,
+        isHost: false
+      })
+    }
   }
 
   return (
