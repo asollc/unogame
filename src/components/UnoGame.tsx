@@ -173,6 +173,7 @@ function ColorSelectModal({ onColorSelect, onClose }: { onColorSelect: (color: C
 }
 
 export default function UnoGame() {
+  console.log('UnoGame component rendering...')
   const [gameState, setGameState] = useState<GameState>('lobby')
   const [game, setGame] = useState<Game | null>(null)
   const [playerName, setPlayerName] = useState('')
@@ -967,8 +968,9 @@ export default function UnoGame() {
     return positions[totalPlayers as keyof typeof positions]?.[index] || positions[4][index % 4]
   }
 
-  // Main game screen
-  if (!game) return null
+  // Main game screen - show console log for debugging
+  console.log('About to render, gameState:', gameState, 'game:', game)
+  if (!game && gameState !== 'lobby' && gameState !== 'joining') return null
 
   const currentPlayer = game.players[game.currentPlayerIndex]
   const myPlayer = game.players.find(p => p.id === playerId)
