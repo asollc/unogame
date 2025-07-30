@@ -96,6 +96,18 @@ function generateInviteCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase()
 }
 
+function getColorClasses(color: CardColor): string {
+  const baseClasses = "border-2 border-white"
+  switch (color) {
+    case 'red': return `${baseClasses} bg-red-500 text-white`
+    case 'blue': return `${baseClasses} bg-blue-500 text-white`
+    case 'green': return `${baseClasses} bg-green-500 text-white`
+    case 'yellow': return `${baseClasses} bg-yellow-400 text-black`
+    case 'wild': return `${baseClasses} bg-gradient-to-br from-purple-600 to-pink-600 text-white`
+    default: return baseClasses
+  }
+}
+
 // Confetti component
 function Confetti() {
   return (
@@ -127,7 +139,7 @@ function ColorSelectModal({ onColorSelect, onClose }: { onColorSelect: (color: C
             <button
               key={color}
               onClick={() => onColorSelect(color)}
-              className={`w-16 h-16 rounded-lg border-2 border-white ${getCardColorClasses(color)} hover:scale-110 transition-transform`}
+              className={`w-16 h-16 rounded-lg ${getColorClasses(color)} hover:scale-110 transition-transform`}
             >
               <span className="text-white font-bold text-sm" style={{ textShadow: '1px 1px 0 black' }}>
                 {color.toUpperCase()}
@@ -253,24 +265,24 @@ export default function UnoGame() {
         maxPlayers: gameData.max_players,
         currentPlayerIndex: gameData.current_player_index,
         direction: gameData.direction as 1 | -1,
-        drawPile: (gameData.draw_pile as UnoCard[]) || [],
-        discardPile: (gameData.discard_pile as UnoCard[]) || [],
+        drawPile: (gameData.draw_pile as unknown as UnoCard[]) || [],
+        discardPile: (gameData.discard_pile as unknown as UnoCard[]) || [],
         currentColor: gameData.current_color as CardColor,
         drawCount: gameData.draw_count,
-        lastPlayedCard: gameData.last_played_card as UnoCard,
-        playHistory: (gameData.play_history as { player: string; action: string }[]) || [],
+        lastPlayedCard: gameData.last_played_card as unknown as UnoCard,
+        playHistory: (gameData.play_history as unknown as { player: string; action: string }[]) || [],
         gameState: gameData.game_state,
         winnerId: gameData.winner_id,
-        selectedCards: (gameData.selected_cards as UnoCard[]) || [],
+        selectedCards: (gameData.selected_cards as unknown as UnoCard[]) || [],
         stackingTimer: gameData.stacking_timer,
         pendingDrawTotal: gameData.pending_draw_total || 0,
         pendingDrawType: gameData.pending_draw_type,
-        stackedDiscard: (gameData.stacked_discard as UnoCard[]) || [],
+        stackedDiscard: (gameData.stacked_discard as unknown as UnoCard[]) || [],
         expandedHandPlayer: gameData.expanded_hand_player,
         players: playersData.map(p => ({
           id: p.player_id,
           name: p.name,
-          hand: (p.hand as UnoCard[]) || [],
+          hand: (p.hand as unknown as UnoCard[]) || [],
           position: p.position,
           isHost: p.is_host
         }))
@@ -779,7 +791,7 @@ export default function UnoGame() {
         .from('games')
         .update({
           draw_pile: [
-            ...(gameData.draw_pile as UnoCard[]).slice(0, -7),
+            ...(gameData.draw_pile as unknown as UnoCard[]).slice(0, -7),
             ...deck
           ] as any
         })
@@ -829,9 +841,9 @@ export default function UnoGame() {
   }
 
   // Visual helper functions
-  const getCardColorClasses = (color: CardColor): string => {
+  const getCardColorClasses = (card: UnoCard): string => {
     const baseClasses = "uno-card border-2 border-white"
-    switch (color) {
+    switch (card.color) {
       case 'red': return `${baseClasses} uno-card-red`
       case 'blue': return `${baseClasses} uno-card-blue`
       case 'green': return `${baseClasses} uno-card-green`
@@ -840,6 +852,7 @@ export default function UnoGame() {
       default: return baseClasses
     }
   }
+
 
   const getColorIndicatorClass = (color: CardColor): string => {
     switch (color) {
@@ -860,7 +873,7 @@ export default function UnoGame() {
     return (
       <div
         key={card.id}
-        className={`${getCardColorClasses(card.color)} ${sizeClasses} ${selectedClasses} flex items-center justify-center cursor-pointer relative transition-all duration-200`}
+        className={`${getCardColorClasses(card)} ${sizeClasses} ${selectedClasses} flex items-center justify-center cursor-pointer relative transition-all duration-200`}
         onClick={onClick}
       >
         {isSelected && (
