@@ -116,17 +116,23 @@
 @layer base {
   * {
     @apply border-border;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
   }
 
   body {
     @apply bg-background text-foreground;
+    overscroll-behavior: none;
+    touch-action: manipulation;
   }
 }
 
 @layer components {
   /* Uno Card Components */
   .uno-card {
-    @apply rounded-lg border-2 border-black shadow-[var(--card-shadow)] 
+    @apply rounded-lg border-2 border-white shadow-[var(--card-shadow)] 
            transition-[var(--transition-smooth)] cursor-pointer relative;
   }
   
