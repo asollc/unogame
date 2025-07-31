@@ -102,6 +102,8 @@ export type Database = {
           name: string
           player_id: string
           position: number
+          seated: boolean
+          seated_position: number | null
         }
         Insert: {
           game_id: string
@@ -112,6 +114,8 @@ export type Database = {
           name: string
           player_id: string
           position: number
+          seated?: boolean
+          seated_position?: number | null
         }
         Update: {
           game_id?: string
@@ -122,6 +126,8 @@ export type Database = {
           name?: string
           player_id?: string
           position?: number
+          seated?: boolean
+          seated_position?: number | null
         }
         Relationships: [
           {

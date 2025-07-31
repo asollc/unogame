@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 // Types
 type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'wild';
 type CardType = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4';
-type GameState = 'lobby' | 'waiting' | 'playing' | 'ended' | 'color-select' | 'joining';
+type GameState = 'lobby' | 'waiting' | 'seating' | 'playing' | 'ended' | 'color-select' | 'joining';
 interface UnoCard {
   id: string;
   color: CardColor;
@@ -24,6 +24,8 @@ interface Player {
   hand: UnoCard[];
   position: number;
   isHost: boolean;
+  seated: boolean;
+  seatedPosition?: number;
 }
 interface Game {
   id: string;
@@ -206,6 +208,7 @@ export default function UnoGame() {
   const [showColorSelect, setShowColorSelect] = useState(false);
   const [pendingWildCards, setPendingWildCards] = useState<UnoCard[]>([]);
   const [expandedHand, setExpandedHand] = useState(false);
+  const [selectedPlayerForSeating, setSelectedPlayerForSeating] = useState<string | null>(null);
   const [drawTimer, setDrawTimer] = useState<number | null>(null);
   const [timerExpired, setTimerExpired] = useState(false);
   const [joinGameCode, setJoinGameCode] = useState('');
@@ -339,7 +342,9 @@ export default function UnoGame() {
           name: p.name,
           hand: validateUnoCards(p.hand),
           position: p.position,
-          isHost: p.is_host
+          isHost: p.is_host,
+          seated: p.seated || false,
+          seatedPosition: p.seated_position
         }))
       };
       setGame(transformedGame);
@@ -953,8 +958,41 @@ export default function UnoGame() {
   const startGame = async () => {
     if (!game || game.players.length < 2) return;
     await supabase.from('games').update({
+      game_state: 'seating'
+    }).eq('id', game.id);
+  };
+
+  const beginGame = async () => {
+    if (!game) return;
+    const seatedPlayers = game.players.filter(p => p.seated);
+    if (seatedPlayers.length < 2) return;
+    
+    await supabase.from('games').update({
       game_state: 'playing'
     }).eq('id', game.id);
+  };
+
+  const seatPlayer = async (playerId: string, position: number) => {
+    if (!game || !myPlayer?.isHost) return;
+    
+    // Check if position is already taken
+    const positionTaken = game.players.some(p => p.seatedPosition === position && p.seated);
+    if (positionTaken) return;
+    
+    await supabase.from('players').update({
+      seated: true,
+      seated_position: position,
+      position: position
+    }).eq('player_id', playerId).eq('game_id', game.id);
+  };
+
+  const unseatPlayer = async (playerId: string) => {
+    if (!game || !myPlayer?.isHost) return;
+    
+    await supabase.from('players').update({
+      seated: false,
+      seated_position: null
+    }).eq('player_id', playerId).eq('game_id', game.id);
   };
   const copyInviteLink = () => {
     const link = `${window.location.origin}?game=${game?.inviteCode}`;
@@ -1086,7 +1124,7 @@ export default function UnoGame() {
       </div>;
   };
 
-  // Hexagon positioning for players
+  // Hexagon positioning for players (supporting up to 8 players)
   const getPlayerPosition = (index: number, totalPlayers: number) => {
     const positions = {
       2: [{
@@ -1173,6 +1211,68 @@ export default function UnoGame() {
         top: '25%',
         left: '10%',
         transform: 'translateY(-50%)'
+      }],
+      7: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '20%',
+        right: '8%',
+        transform: 'translateY(-50%)'
+      }, {
+        bottom: '30%',
+        right: '8%',
+        transform: 'translateY(50%)'
+      }, {
+        bottom: '10%',
+        right: '35%',
+        transform: 'translateX(50%)'
+      }, {
+        bottom: '10%',
+        left: '35%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '30%',
+        left: '8%',
+        transform: 'translateY(50%)'
+      }, {
+        top: '20%',
+        left: '8%',
+        transform: 'translateY(-50%)'
+      }],
+      8: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '20%',
+        right: '8%',
+        transform: 'translateY(-50%)'
+      }, {
+        top: '50%',
+        right: '5%',
+        transform: 'translateY(-50%)'
+      }, {
+        bottom: '20%',
+        right: '8%',
+        transform: 'translateY(50%)'
+      }, {
+        bottom: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '20%',
+        left: '8%',
+        transform: 'translateY(50%)'
+      }, {
+        top: '50%',
+        left: '5%',
+        transform: 'translateY(-50%)'
+      }, {
+        top: '20%',
+        left: '8%',
+        transform: 'translateY(-50%)'
       }]
     };
     return positions[totalPlayers as keyof typeof positions]?.[index] || positions[4][index % 4];
@@ -1206,6 +1306,8 @@ export default function UnoGame() {
                   <SelectItem value="4" className="text-white">4 Players</SelectItem>
                   <SelectItem value="5" className="text-white">5 Players</SelectItem>
                   <SelectItem value="6" className="text-white">6 Players</SelectItem>
+                  <SelectItem value="7" className="text-white">7 Players</SelectItem>
+                  <SelectItem value="8" className="text-white">8 Players</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1297,7 +1399,7 @@ export default function UnoGame() {
         last_played_card: null,
         selected_cards: [] as any,
         winner_id: null,
-        game_state: 'playing',
+        game_state: 'seating',
         expanded_hand_player: null
       }).eq('id', game.id);
     };
@@ -1354,6 +1456,9 @@ export default function UnoGame() {
           {gameState === 'waiting' ? <div className="text-white">
               <div className="text-xs sm:text-sm font-bold">Waiting for players...</div>
               <div className="text-xs">{game.players.length}/{game.maxPlayers} players</div>
+            </div> : gameState === 'seating' ? <div className="text-white">
+              <div className="text-xs sm:text-sm font-bold">Seating players...</div>
+              <div className="text-xs">{game.players.filter(p => p.seated).length}/{game.players.length} seated</div>
             </div> : <div className="text-left">
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <span className="text-xs sm:text-sm font-bold text-white">Turn: {currentPlayer?.name}</span>
@@ -1387,37 +1492,96 @@ export default function UnoGame() {
               </Button>
               <div className="text-xs text-white mt-1">Game ID: {game?.inviteCode}</div>
             </div>}
+
+          {gameState === 'seating' && myPlayer?.isHost && <Button onClick={beginGame} size="sm" disabled={game.players.filter(p => p.seated).length < 2}>
+              Begin Game
+            </Button>}
         </div>
       </div>
+
+      {/* Seating UI */}
+      {gameState === 'seating' && (
+        <div className="p-4 bg-gray-800 mx-4 rounded-lg mb-4">
+          <h3 className="text-white text-lg font-bold mb-3 text-center">Seat Players</h3>
+          {/* Unseated Players */}
+          <div className="mb-4">
+            <p className="text-white text-sm mb-2">Available Players:</p>
+            <div className="flex flex-wrap gap-2">
+              {game.players.filter(p => !p.seated).map(player => (
+                <button
+                  key={player.id}
+                  onClick={() => setSelectedPlayerForSeating(selectedPlayerForSeating === player.id ? null : player.id)}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    selectedPlayerForSeating === player.id 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  }`}
+                >
+                  {player.name} {player.isHost && '(Host)'}
+                </button>
+              ))}
+            </div>
+            {selectedPlayerForSeating && (
+              <p className="text-blue-400 text-xs mt-1">Click an empty seat to place {game.players.find(p => p.id === selectedPlayerForSeating)?.name}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Game area - relative positioning for mobile */}
       <div className="flex-1 relative overflow-hidden" style={{
       height: 'calc(100vh - 8rem)'
     }}>
-        {/* Player positions */}
-        {allSlots.map((player, index) => {
-        const position = getPlayerPosition(player.position, game.maxPlayers);
-        // Adjust top position to account for increased spacing
-        const adjustedPosition = player.position === 0 ? {
-          ...position,
-          top: '15%'
-        } :
-        // Move top player down by 5 units
-        position;
-        const isMyPosition = player.id === playerId;
-        const isCurrentPlayer = player.position === game.currentPlayerIndex;
-        const actualPlayer = game.players.find(p => p.position === player.position);
-        return <div key={player.id} className="absolute" style={adjustedPosition}>
-              <div className={`bg-gray-800 rounded-lg p-1 sm:p-2 shadow-lg text-center min-w-[60px] sm:min-w-[80px] ${isCurrentPlayer ? 'ring-2 ring-blue-400' : ''}`}>
+        {/* Player positions - for both seating and playing */}
+        {Array.from({ length: game.maxPlayers }, (_, index) => {
+          const position = getPlayerPosition(index, game.maxPlayers);
+          // Adjust top position to account for increased spacing
+          const adjustedPosition = index === 0 ? {
+            ...position,
+            top: '15%'
+          } : position;
+          
+          const seatedPlayer = game.players.find(p => p.seated && p.seatedPosition === index);
+          const isCurrentPlayer = gameState === 'playing' && index === game.currentPlayerIndex;
+          const isClickable = gameState === 'seating' && myPlayer?.isHost;
+          
+          return (
+            <div 
+              key={index} 
+              className="absolute" 
+              style={adjustedPosition}
+              onClick={() => {
+                if (gameState === 'seating' && myPlayer?.isHost) {
+                  if (seatedPlayer) {
+                    // Unseat player
+                    unseatPlayer(seatedPlayer.id);
+                  } else if (selectedPlayerForSeating) {
+                    // Seat selected player
+                    seatPlayer(selectedPlayerForSeating, index);
+                    setSelectedPlayerForSeating(null);
+                  }
+                }
+              }}
+            >
+              <div className={`
+                bg-gray-800 rounded-lg p-1 sm:p-2 shadow-lg text-center min-w-[60px] sm:min-w-[80px] 
+                ${isCurrentPlayer ? 'ring-2 ring-blue-400' : ''} 
+                ${isClickable ? 'hover:bg-gray-700 cursor-pointer' : ''}
+                ${gameState === 'seating' && !seatedPlayer && selectedPlayerForSeating ? 'ring-2 ring-green-400 hover:ring-green-300' : ''}
+              `}>
                 <div className="text-white text-xs sm:text-sm font-bold">
-                  {actualPlayer ? actualPlayer.name : 'Empty'}
+                  {seatedPlayer ? seatedPlayer.name : gameState === 'seating' ? `Seat ${index + 1}` : 'Empty'}
                 </div>
-                {actualPlayer && <div className="text-gray-400 text-xs">
-                    {actualPlayer.hand.length} cards
+                {seatedPlayer && <div className="text-gray-400 text-xs">
+                    {gameState === 'playing' ? `${seatedPlayer.hand.length} cards` : 'Seated'}
                   </div>}
+                {gameState === 'seating' && !seatedPlayer && (
+                  <div className="text-gray-500 text-xs">Empty</div>
+                )}
               </div>
-            </div>;
-      })}
+            </div>
+          );
+        })}
 
         {/* Center play area - more compact */}
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center space-y-2">
