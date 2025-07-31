@@ -706,8 +706,8 @@ export default function UnoGame() {
       };
     }
 
-    // Normal turn progression for non-skip cards
-    if (skipCount === 0 && !cards.some(c => c.type === 'draw2' || c.type === 'wild4')) {
+    // Normal turn progression for all cards (including draw cards)
+    if (skipCount === 0) {
       nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length;
     }
     return {
