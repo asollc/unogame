@@ -375,7 +375,8 @@ export default function UnoGame() {
     if (!game || !myPlayer || gameState !== 'playing') return;
 
     // Check if it's the player's turn - allow during draw response mode
-    const isMyTurn = game.currentPlayerIndex === myPlayer.position;
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    const isMyTurn = currentPlayer?.id === myPlayer.id;
     const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
     if (!isMyTurn && !inDrawResponseMode) {
       toast({
@@ -651,6 +652,19 @@ export default function UnoGame() {
       });
     }
   };
+  // Helper function to get seated players in position order
+  const getSeatedPlayers = () => {
+    return game?.players.filter(p => p.seated).sort((a, b) => a.seatedPosition! - b.seatedPosition!) || [];
+  };
+
+  // Helper function to get current seated player index
+  const getCurrentSeatedPlayerIndex = () => {
+    if (!game) return 0;
+    const seatedPlayers = getSeatedPlayers();
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    return seatedPlayers.findIndex(p => p.id === currentPlayer?.id) || 0;
+  };
+
   const calculateCardEffects = (cards: UnoCard[]) => {
     if (!game) return {
       nextPlayerIndex: 0,
@@ -658,14 +672,25 @@ export default function UnoGame() {
       drawEffects: 0,
       skipEffects: 0
     };
-    let nextPlayerIndex = game.currentPlayerIndex;
+    
+    const seatedPlayers = getSeatedPlayers();
+    if (seatedPlayers.length === 0) return {
+      nextPlayerIndex: game.currentPlayerIndex,
+      newDirection: game.direction,
+      drawEffects: 0,
+      skipEffects: 0
+    };
+
+    const currentSeatedIndex = getCurrentSeatedPlayerIndex();
+    let nextSeatedIndex = currentSeatedIndex;
     let newDirection = game.direction;
     let skipCount = 0;
+    
     cards.forEach(card => {
       switch (card.type) {
         case 'reverse':
           newDirection *= -1;
-          if (game.players.length === 2) {
+          if (seatedPlayers.length === 2) {
             skipCount += 1; // In 2-player games, reverse acts as skip
           }
           break;
@@ -683,10 +708,10 @@ export default function UnoGame() {
     // Handle skip stacking - current player doesn't get skipped
     if (skipCount > 0) {
       // Skip the next player(s), but keep current player's turn if stacking
-      if (game.players.length === 2 && cards.some(c => c.type === 'skip' || c.type === 'reverse' && game.players.length === 2)) {
+      if (seatedPlayers.length === 2 && cards.some(c => c.type === 'skip' || c.type === 'reverse' && seatedPlayers.length === 2)) {
         // In 2-player games with skip stacking, current player gets additional turns
         return {
-          nextPlayerIndex,
+          nextPlayerIndex: game.currentPlayerIndex, // Keep current player
           newDirection,
           drawEffects: 0,
           skipEffects: skipCount
@@ -694,13 +719,13 @@ export default function UnoGame() {
       } else {
         // Multi-player skip stacking
         for (let i = 0; i < skipCount; i++) {
-          nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length;
+          nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
         }
       }
     }
 
     // Handle even number of reverses in non-2-player games  
-    if (cards.filter(c => c.type === 'reverse').length % 2 === 0 && game.players.length > 2) {
+    if (cards.filter(c => c.type === 'reverse').length % 2 === 0 && seatedPlayers.length > 2) {
       newDirection = game.direction; // Direction stays the same
       // Player gets another turn
       return {
@@ -713,10 +738,15 @@ export default function UnoGame() {
 
     // Normal turn progression for all cards (including draw cards)
     if (skipCount === 0) {
-      nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length;
+      nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
+    
+    // Convert seated index back to player array index
+    const nextSeatedPlayer = seatedPlayers[nextSeatedIndex];
+    const nextPlayerIndex = game.players.findIndex(p => p.id === nextSeatedPlayer?.id);
+    
     return {
-      nextPlayerIndex,
+      nextPlayerIndex: nextPlayerIndex !== -1 ? nextPlayerIndex : game.currentPlayerIndex,
       newDirection,
       drawEffects: 0,
       skipEffects: skipCount
@@ -751,7 +781,11 @@ export default function UnoGame() {
       }).eq('game_id', game.id).eq('player_id', currentPlayer.id);
 
       // Move to next player after current player draws and gets their turn skipped
-      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+      const seatedPlayers = getSeatedPlayers();
+      const currentSeatedIndex = getCurrentSeatedPlayerIndex();
+      const nextSeatedIndex = (currentSeatedIndex + game.direction + seatedPlayers.length) % seatedPlayers.length;
+      const nextSeatedPlayer = seatedPlayers[nextSeatedIndex];
+      const nextPlayerIndex = game.players.findIndex(p => p.id === nextSeatedPlayer?.id);
       
       // Store the draw card that was on top of discard pile for color matching
       const topDrawCard = game.discardPile[game.discardPile.length - 1];
@@ -784,7 +818,8 @@ export default function UnoGame() {
     if (!game || !myPlayer || gameState !== 'playing') return;
 
     // Check if it's the player's turn
-    if (game.currentPlayerIndex !== myPlayer.position) {
+    const currentPlayer = game.players[game.currentPlayerIndex];
+    if (currentPlayer?.id !== myPlayer.id) {
       toast({
         title: "Not your turn",
         description: "Wait for your turn to draw",
@@ -822,7 +857,11 @@ export default function UnoGame() {
       let newCurrentColor = game.currentColor;
       
       if (shouldSkipTurn) {
-        nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+        const seatedPlayers = getSeatedPlayers();
+        const currentSeatedIndex = getCurrentSeatedPlayerIndex();
+        const nextSeatedIndex = (currentSeatedIndex + game.direction + seatedPlayers.length) % seatedPlayers.length;
+        const nextSeatedPlayer = seatedPlayers[nextSeatedIndex];
+        nextPlayerIndex = game.players.findIndex(p => p.id === nextSeatedPlayer?.id);
         // After drawing stack, next player can match the color of the draw card on top
         const topDrawCard = game.discardPile[game.discardPile.length - 1];
         newCurrentColor = topDrawCard?.color === 'wild' ? game.currentColor : topDrawCard?.color;
@@ -1132,7 +1171,7 @@ export default function UnoGame() {
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '50%',
         transform: 'translateX(-50%)'
       }],
@@ -1141,11 +1180,11 @@ export default function UnoGame() {
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '20%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '80%',
         transform: 'translateX(-50%)'
       }],
@@ -1158,7 +1197,7 @@ export default function UnoGame() {
         right: '10%',
         transform: 'translateY(-50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
@@ -1175,15 +1214,15 @@ export default function UnoGame() {
         right: '15%',
         transform: 'translateY(-50%)'
       }, {
-        bottom: '25%',
+        bottom: '35%',
         right: '15%',
         transform: 'translateY(50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '25%',
+        bottom: '35%',
         left: '15%',
         transform: 'translateY(50%)'
       }],
@@ -1196,15 +1235,15 @@ export default function UnoGame() {
         right: '10%',
         transform: 'translateY(-50%)'
       }, {
-        bottom: '25%',
+        bottom: '35%',
         right: '10%',
         transform: 'translateY(50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '25%',
+        bottom: '35%',
         left: '10%',
         transform: 'translateY(50%)'
       }, {
@@ -1221,19 +1260,19 @@ export default function UnoGame() {
         right: '8%',
         transform: 'translateY(-50%)'
       }, {
-        bottom: '30%',
+        bottom: '40%',
         right: '8%',
         transform: 'translateY(50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         right: '35%',
         transform: 'translateX(50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '35%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '30%',
+        bottom: '40%',
         left: '8%',
         transform: 'translateY(50%)'
       }, {
@@ -1254,15 +1293,15 @@ export default function UnoGame() {
         right: '5%',
         transform: 'translateY(-50%)'
       }, {
-        bottom: '20%',
+        bottom: '35%',
         right: '8%',
         transform: 'translateY(50%)'
       }, {
-        bottom: '10%',
+        bottom: '30%',
         left: '50%',
         transform: 'translateX(-50%)'
       }, {
-        bottom: '20%',
+        bottom: '35%',
         left: '8%',
         transform: 'translateY(50%)'
       }, {
@@ -1546,7 +1585,8 @@ export default function UnoGame() {
           } : position;
           
           const seatedPlayer = game.players.find(p => p.seated && p.seatedPosition === (actualPosition ?? index));
-          const isCurrentPlayer = gameState === 'playing' && game.players.filter(p => p.seated).sort((a, b) => a.seatedPosition! - b.seatedPosition!)[index]?.id === game.players[game.currentPlayerIndex]?.id;
+          const currentPlayer = game.players[game.currentPlayerIndex];
+          const isCurrentPlayer = gameState === 'playing' && seatedPlayer?.id === currentPlayer?.id;
           const isClickable = gameState === 'seating' && myPlayer?.isHost;
           
           return (
