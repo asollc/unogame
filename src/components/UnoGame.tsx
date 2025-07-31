@@ -374,29 +374,22 @@ export default function UnoGame() {
   const selectCard = (card: UnoCard, cardIndex: number) => {
     if (!game || !myPlayer || gameState !== 'playing') return;
 
-    // Check if it's the player's turn - allow during draw response mode
+    // Check if it's the player's turn
     const currentPlayer = game.players[game.currentPlayerIndex];
     const isMyTurn = currentPlayer?.id === myPlayer.id;
-    const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
-    if (!isMyTurn && !inDrawResponseMode) {
+    
+    if (!isMyTurn) {
       toast({
         title: "Not your turn",
-        description: "Wait for your turn to select cards",
+        description: "Wait for your turn to play",
         variant: "destructive"
       });
       return;
     }
 
-    // In draw response mode, only current player can play and only matching draw cards
+    // Check draw response mode
+    const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
     if (inDrawResponseMode) {
-      if (!isMyTurn) {
-        toast({
-          title: "Not your turn",
-          description: "Only the current player can respond to draw cards",
-          variant: "destructive"
-        });
-        return;
-      }
       if (!canPlayDrawCard(card)) {
         toast({
           title: "Must play matching draw card",
@@ -553,11 +546,15 @@ export default function UnoGame() {
         
         // Move turn to next player immediately after playing draw cards
         actualNextPlayerIndex = nextPlayerIndex;
-      } else if (game.pendingDrawTotal > 0) {
-        // Clear pending draw if non-draw cards played during draw response
-        newPendingDrawTotal = 0;
-        newPendingDrawType = null;
-        newStackingTimer = null;
+      } else {
+        // For all other cards, clear any pending draw state and advance turn normally
+        if (game.pendingDrawTotal > 0) {
+          newPendingDrawTotal = 0;
+          newPendingDrawType = null;
+          newStackingTimer = null;
+        }
+        // Always advance turn for normal card plays
+        actualNextPlayerIndex = nextPlayerIndex;
       }
 
       // Determine new color
@@ -736,7 +733,7 @@ export default function UnoGame() {
       };
     }
 
-    // Normal turn progression for all cards (including draw cards)
+    // Normal turn progression - always advance turn unless special stacking rules apply
     if (skipCount === 0) {
       nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
