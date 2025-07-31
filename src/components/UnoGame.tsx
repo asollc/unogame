@@ -196,7 +196,7 @@ export default function UnoGame() {
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [game, setGame] = useState<Game | null>(null);
   const [playerName, setPlayerName] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(4);
+  const [maxPlayers, setMaxPlayers] = useState(2);
   const [selectedColor, setSelectedColor] = useState<CardColor | null>(null);
   const [playerId] = useState(() => Math.random().toString(36).substring(7));
   const [showHistory, setShowHistory] = useState(false);
@@ -345,11 +345,10 @@ export default function UnoGame() {
       setGame(transformedGame);
       setGameState(transformedGame.gameState as GameState);
 
-      // Handle timer for next player (not current)
+      // Handle timer for current player (who needs to respond to draw)
       if (transformedGame.stackingTimer && transformedGame.pendingDrawTotal > 0) {
-        const nextPlayerIndex = (transformedGame.currentPlayerIndex + transformedGame.direction + transformedGame.players.length) % transformedGame.players.length;
-        const nextPlayer = transformedGame.players[nextPlayerIndex];
-        if (nextPlayer?.id === playerId) {
+        const currentPlayer = transformedGame.players[transformedGame.currentPlayerIndex];
+        if (currentPlayer?.id === playerId) {
           const timerEnd = new Date(transformedGame.stackingTimer).getTime();
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((timerEnd - now) / 1000));
@@ -381,22 +380,20 @@ export default function UnoGame() {
       return;
     }
 
-    // In draw response mode, only next player can play and only matching draw cards
+    // In draw response mode, only current player can play and only matching draw cards
     if (inDrawResponseMode) {
-      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
-      const isNextPlayer = myPlayer.position === nextPlayerIndex;
-      if (!isNextPlayer) {
+      if (!isMyTurn) {
         toast({
           title: "Not your turn",
-          description: "Only the next player can respond to draw cards",
+          description: "Only the current player can respond to draw cards",
           variant: "destructive"
         });
         return;
       }
       if (!canPlayDrawCard(card)) {
         toast({
-          title: "Invalid card",
-          description: "You can only play matching draw cards or draw the cards",
+          title: "Must play matching draw card",
+          description: `You must play a ${game.pendingDrawType} card or draw +${game.pendingDrawTotal} cards`,
           variant: "destructive"
         });
         return;
@@ -413,9 +410,19 @@ export default function UnoGame() {
         if (canPlayCard(card)) {
           setSelectedCards([card]);
         } else {
+          // Provide specific error message based on game state
+          let errorMessage = "";
+          if (topCard?.type === 'number') {
+            errorMessage = `Must match color (${game.currentColor}) or number (${topCard.value})`;
+          } else if (topCard?.type && topCard.type !== 'wild' && topCard.type !== 'wild4') {
+            errorMessage = `Must match card type (${topCard.type}) or color (${game.currentColor})`;
+          } else {
+            errorMessage = `Must match color (${game.currentColor})`;
+          }
+          
           toast({
             title: "Invalid card",
-            description: "This card cannot be played",
+            description: errorMessage,
             variant: "destructive"
           });
         }
@@ -425,9 +432,10 @@ export default function UnoGame() {
         if (canStackCard(firstCard, card)) {
           setSelectedCards(prev => [...prev, card]);
         } else {
+          const stackType = firstCard.type === 'number' ? `number ${firstCard.value}` : firstCard.type;
           toast({
             title: "Cannot stack",
-            description: "You can only stack cards with the same value",
+            description: `Can only stack cards with same ${stackType}`,
             variant: "destructive"
           });
         }
@@ -722,8 +730,14 @@ export default function UnoGame() {
 
       // Move to next player after current player draws and gets their turn skipped
       const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+      
+      // Store the draw card that was on top of discard pile for color matching
+      const topDrawCard = game.discardPile[game.discardPile.length - 1];
+      const newCurrentColor = topDrawCard?.color === 'wild' ? game.currentColor : topDrawCard?.color;
+      
       await supabase.from('games').update({
         current_player_index: nextPlayerIndex,
+        current_color: newCurrentColor, // Ensure next player can match draw card color
         pending_draw_total: 0,
         pending_draw_type: null,
         stacking_timer: null,
@@ -783,9 +797,15 @@ export default function UnoGame() {
 
       // Only move to next player if forced to draw due to draw cards
       let nextPlayerIndex = game.currentPlayerIndex;
+      let newCurrentColor = game.currentColor;
+      
       if (shouldSkipTurn) {
         nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+        // After drawing stack, next player can match the color of the draw card on top
+        const topDrawCard = game.discardPile[game.discardPile.length - 1];
+        newCurrentColor = topDrawCard?.color === 'wild' ? game.currentColor : topDrawCard?.color;
       }
+      
       const newPlayHistory = [...game.playHistory, {
         player: myPlayer.name,
         action: drawAmount > 1 ? `drew +${drawAmount} cards` : 'drew 1 card'
@@ -793,6 +813,7 @@ export default function UnoGame() {
       await supabase.from('games').update({
         draw_pile: newDrawPile as any,
         current_player_index: nextPlayerIndex,
+        current_color: newCurrentColor,
         pending_draw_total: shouldSkipTurn ? 0 : game.pendingDrawTotal,
         pending_draw_type: shouldSkipTurn ? null : game.pendingDrawType,
         stacking_timer: shouldSkipTurn ? null : game.stackingTimer,
