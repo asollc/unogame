@@ -347,8 +347,9 @@ export default function UnoGame() {
 
       // Handle timer for current player (who needs to respond to draw)
       if (transformedGame.stackingTimer && transformedGame.pendingDrawTotal > 0) {
-        const currentPlayer = transformedGame.players[transformedGame.currentPlayerIndex];
-        if (currentPlayer?.id === playerId) {
+        // Use the fresh database state to determine who should see the timer
+        const currentPlayerFromDB = transformedGame.players[transformedGame.currentPlayerIndex];
+        if (currentPlayerFromDB?.id === playerId) {
           const timerEnd = new Date(transformedGame.stackingTimer).getTime();
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((timerEnd - now) / 1000));
