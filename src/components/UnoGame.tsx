@@ -378,10 +378,28 @@ export default function UnoGame() {
     const currentPlayer = game.players[game.currentPlayerIndex];
     const isMyTurn = currentPlayer?.id === myPlayer.id;
     
+    console.log('Turn validation:', {
+      currentPlayerIndex: game.currentPlayerIndex,
+      currentPlayerId: currentPlayer?.id,
+      myPlayerId: myPlayer.id,
+      isMyTurn,
+      gameState
+    });
+    
     if (!isMyTurn) {
       toast({
         title: "Not your turn",
         description: "Wait for your turn to play",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Validate card can be played FIRST
+    if (!canPlayCard(card)) {
+      toast({
+        title: "Invalid card",
+        description: "This card cannot be played now",
         variant: "destructive"
       });
       return;
@@ -465,8 +483,6 @@ export default function UnoGame() {
     // Wild cards can always be played (except during draw response)
     if (card.color === 'wild') return true;
 
-    // For stacking validation, check bottom card of discard pile for matching
-    const baseCard = selectedCards.length > 0 ? topCard : topCard;
     const currentColor = game.currentColor;
 
     // For first card in a stack, must match current game state
@@ -475,11 +491,21 @@ export default function UnoGame() {
       if (card.color === currentColor) return true;
 
       // Match number value
-      if (card.type === 'number' && baseCard.type === 'number' && card.value === baseCard.value) return true;
+      if (card.type === 'number' && topCard.type === 'number' && card.value === topCard.value) return true;
 
       // Match special card type (skip, reverse, draw2) but not wild types
-      if (card.type === baseCard.type && card.type !== 'wild' && card.type !== 'wild4') return true;
+      if (card.type === topCard.type && card.type !== 'wild' && card.type !== 'wild4') return true;
     }
+
+    console.log('Card validation failed:', {
+      topCard: `${topCard.color} ${topCard.value}`,
+      currentColor,
+      playedCard: `${card.color} ${card.value}`,
+      colorMatch: card.color === currentColor,
+      valueMatch: card.type === 'number' && topCard.type === 'number' && card.value === topCard.value,
+      typeMatch: card.type === topCard.type && card.type !== 'wild' && card.type !== 'wild4'
+    });
+    
     return false;
   };
   const canPlayDrawCard = (card: UnoCard): boolean => {
@@ -742,12 +768,25 @@ export default function UnoGame() {
     const nextSeatedPlayer = seatedPlayers[nextSeatedIndex];
     const nextPlayerIndex = game.players.findIndex(p => p.id === nextSeatedPlayer?.id);
     
-    return {
+    const result = {
       nextPlayerIndex: nextPlayerIndex !== -1 ? nextPlayerIndex : game.currentPlayerIndex,
       newDirection,
       drawEffects: 0,
       skipEffects: skipCount
     };
+
+    console.log('Turn advancement calculated:', {
+      currentPlayerIndex: game.currentPlayerIndex,
+      currentSeatedIndex,
+      nextSeatedIndex,
+      nextPlayerIndex: result.nextPlayerIndex,
+      direction: newDirection,
+      skipCount,
+      seatedPlayersCount: seatedPlayers.length,
+      reversesPlayed: cards.filter(c => c.type === 'reverse').length
+    });
+    
+    return result;
   };
   const handleColorSelect = (color: CardColor) => {
     setSelectedColor(color);
