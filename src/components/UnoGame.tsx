@@ -1533,16 +1533,20 @@ export default function UnoGame() {
       height: 'calc(100vh - 8rem)'
     }}>
         {/* Player positions - for both seating and playing */}
-        {Array.from({ length: game.maxPlayers }, (_, index) => {
-          const position = getPlayerPosition(index, game.maxPlayers);
+        {Array.from({ length: gameState === 'seating' ? 8 : game.players.filter(p => p.seated).length }, (_, index) => {
+          // During seating, use index directly. During gameplay, map to actual seated positions
+          const actualPosition = gameState === 'seating' ? index : game.players.filter(p => p.seated).sort((a, b) => a.seatedPosition! - b.seatedPosition!)[index]?.seatedPosition;
+          if (gameState === 'playing' && actualPosition === undefined) return null;
+          
+          const position = getPlayerPosition(actualPosition ?? index, 8);
           // Adjust top position to account for increased spacing
-          const adjustedPosition = index === 0 ? {
+          const adjustedPosition = (actualPosition ?? index) === 0 ? {
             ...position,
             top: '15%'
           } : position;
           
-          const seatedPlayer = game.players.find(p => p.seated && p.seatedPosition === index);
-          const isCurrentPlayer = gameState === 'playing' && index === game.currentPlayerIndex;
+          const seatedPlayer = game.players.find(p => p.seated && p.seatedPosition === (actualPosition ?? index));
+          const isCurrentPlayer = gameState === 'playing' && game.players.filter(p => p.seated).sort((a, b) => a.seatedPosition! - b.seatedPosition!)[index]?.id === game.players[game.currentPlayerIndex]?.id;
           const isClickable = gameState === 'seating' && myPlayer?.isHost;
           
           return (
@@ -1552,12 +1556,13 @@ export default function UnoGame() {
               style={adjustedPosition}
               onClick={() => {
                 if (gameState === 'seating' && myPlayer?.isHost) {
+                  const positionIndex = actualPosition ?? index;
                   if (seatedPlayer) {
                     // Unseat player
                     unseatPlayer(seatedPlayer.id);
                   } else if (selectedPlayerForSeating) {
                     // Seat selected player
-                    seatPlayer(selectedPlayerForSeating, index);
+                    seatPlayer(selectedPlayerForSeating, positionIndex);
                     setSelectedPlayerForSeating(null);
                   }
                 }
@@ -1570,7 +1575,7 @@ export default function UnoGame() {
                 ${gameState === 'seating' && !seatedPlayer && selectedPlayerForSeating ? 'ring-2 ring-green-400 hover:ring-green-300' : ''}
               `}>
                 <div className="text-white text-xs sm:text-sm font-bold">
-                  {seatedPlayer ? seatedPlayer.name : gameState === 'seating' ? `Seat ${index + 1}` : 'Empty'}
+                  {seatedPlayer ? seatedPlayer.name : gameState === 'seating' ? `Seat ${(actualPosition ?? index) + 1}` : 'Empty'}
                 </div>
                 {seatedPlayer && <div className="text-gray-400 text-xs">
                     {gameState === 'playing' ? `${seatedPlayer.hand.length} cards` : 'Seated'}
