@@ -1,215 +1,232 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft, ArrowRight, Trophy, History, Copy, Check, ZoomIn, ZoomOut, Clock } from 'lucide-react'
-import { supabase } from "@/integrations/supabase/client"
-import { useToast } from "@/hooks/use-toast"
+import { useState, useEffect, useCallback } from 'react';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ArrowLeft, ArrowRight, Trophy, History, Copy, Check, ZoomIn, ZoomOut, Clock } from 'lucide-react';
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 // Types
-type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'wild'
-type CardType = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4'
-type GameState = 'lobby' | 'waiting' | 'playing' | 'ended' | 'color-select' | 'joining'
-
+type CardColor = 'red' | 'blue' | 'green' | 'yellow' | 'wild';
+type CardType = 'number' | 'skip' | 'reverse' | 'draw2' | 'wild' | 'wild4';
+type GameState = 'lobby' | 'waiting' | 'playing' | 'ended' | 'color-select' | 'joining';
 interface UnoCard {
-  id: string
-  color: CardColor
-  type: CardType
-  value?: number
+  id: string;
+  color: CardColor;
+  type: CardType;
+  value?: number;
 }
-
 interface Player {
-  id: string
-  name: string
-  hand: UnoCard[]
-  position: number
-  isHost: boolean
+  id: string;
+  name: string;
+  hand: UnoCard[];
+  position: number;
+  isHost: boolean;
 }
-
 interface Game {
-  id: string
-  hostId: string
-  inviteCode: string
-  maxPlayers: number
-  currentPlayerIndex: number
-  direction: 1 | -1
-  drawPile: UnoCard[]
-  discardPile: UnoCard[]
-  currentColor: CardColor
-  drawCount: number
-  pendingWildCard?: UnoCard
-  lastPlayedCard?: UnoCard
-  playHistory: { player: string; action: string }[]
-  gameState: string
-  winnerId?: string
-  players: Player[]
-  selectedCards: UnoCard[]
-  stackingTimer?: string
-  pendingDrawTotal: number
-  pendingDrawType?: string
-  stackedDiscard: UnoCard[]
-  expandedHandPlayer?: string
+  id: string;
+  hostId: string;
+  inviteCode: string;
+  maxPlayers: number;
+  currentPlayerIndex: number;
+  direction: 1 | -1;
+  drawPile: UnoCard[];
+  discardPile: UnoCard[];
+  currentColor: CardColor;
+  drawCount: number;
+  pendingWildCard?: UnoCard;
+  lastPlayedCard?: UnoCard;
+  playHistory: {
+    player: string;
+    action: string;
+  }[];
+  gameState: string;
+  winnerId?: string;
+  players: Player[];
+  selectedCards: UnoCard[];
+  stackingTimer?: string;
+  pendingDrawTotal: number;
+  pendingDrawType?: string;
+  stackedDiscard: UnoCard[];
+  expandedHandPlayer?: string;
 }
 
 // Card generation
-const colors: CardColor[] = ['red', 'blue', 'green', 'yellow']
-const numbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
+const colors: CardColor[] = ['red', 'blue', 'green', 'yellow'];
+const numbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 function generateDeck(): UnoCard[] {
-  const deck: UnoCard[] = []
-  
+  const deck: UnoCard[] = [];
+
   // Generate 2 complete decks
   for (let deckNum = 0; deckNum < 2; deckNum++) {
     colors.forEach(color => {
-      deck.push({ id: `${color}-0-deck${deckNum}`, color, type: 'number', value: 0 })
+      deck.push({
+        id: `${color}-0-deck${deckNum}`,
+        color,
+        type: 'number',
+        value: 0
+      });
       numbers.slice(1).forEach(num => {
-        deck.push({ id: `${color}-${num}-deck${deckNum}`, color, type: 'number', value: num })
-        deck.push({ id: `${color}-${num}-2-deck${deckNum}`, color, type: 'number', value: num })
-      })
-    })
-    
+        deck.push({
+          id: `${color}-${num}-deck${deckNum}`,
+          color,
+          type: 'number',
+          value: num
+        });
+        deck.push({
+          id: `${color}-${num}-2-deck${deckNum}`,
+          color,
+          type: 'number',
+          value: num
+        });
+      });
+    });
     colors.forEach(color => {
       ['skip', 'reverse', 'draw2'].forEach(type => {
-        deck.push({ id: `${color}-${type}-deck${deckNum}`, color, type: type as CardType })
-        deck.push({ id: `${color}-${type}-2-deck${deckNum}`, color, type: type as CardType })
-      })
-    })
-    
+        deck.push({
+          id: `${color}-${type}-deck${deckNum}`,
+          color,
+          type: type as CardType
+        });
+        deck.push({
+          id: `${color}-${type}-2-deck${deckNum}`,
+          color,
+          type: type as CardType
+        });
+      });
+    });
     for (let i = 0; i < 4; i++) {
-      deck.push({ id: `wild-${i}-deck${deckNum}`, color: 'wild', type: 'wild' })
-      deck.push({ id: `wild4-${i}-deck${deckNum}`, color: 'wild', type: 'wild4' })
+      deck.push({
+        id: `wild-${i}-deck${deckNum}`,
+        color: 'wild',
+        type: 'wild'
+      });
+      deck.push({
+        id: `wild4-${i}-deck${deckNum}`,
+        color: 'wild',
+        type: 'wild4'
+      });
     }
   }
-  
-  return deck
+  return deck;
 }
-
 function shuffleDeck(deck: UnoCard[]): UnoCard[] {
-  const shuffled = [...deck]
+  const shuffled = [...deck];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-  return shuffled
+  return shuffled;
 }
-
 function generateInviteCode(): string {
-  return Math.random().toString(36).substring(2, 8).toUpperCase()
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 // Data validation helpers
 function isValidUnoCard(obj: any): obj is UnoCard {
-  return obj && typeof obj === 'object' && 
-         typeof obj.id === 'string' && 
-         typeof obj.color === 'string' && 
-         typeof obj.type === 'string'
+  return obj && typeof obj === 'object' && typeof obj.id === 'string' && typeof obj.color === 'string' && typeof obj.type === 'string';
 }
-
 function validateUnoCards(data: any): UnoCard[] {
-  if (!Array.isArray(data)) return []
-  return data.filter(isValidUnoCard)
+  if (!Array.isArray(data)) return [];
+  return data.filter(isValidUnoCard);
 }
-
 function validateUnoCard(data: any): UnoCard | null {
-  return isValidUnoCard(data) ? data : null
+  return isValidUnoCard(data) ? data : null;
 }
-
 function getColorClasses(color: CardColor): string {
-  const baseClasses = "border-2"
+  const baseClasses = "border-2";
   switch (color) {
-    case 'red': return `${baseClasses} bg-red-500 text-white border-red-700`
-    case 'blue': return `${baseClasses} bg-blue-500 text-white border-blue-700`
-    case 'green': return `${baseClasses} bg-green-500 text-white border-green-700`
-    case 'yellow': return `${baseClasses} bg-yellow-400 text-black border-yellow-600`
-    case 'wild': return `${baseClasses} bg-gradient-to-br from-purple-600 to-pink-600 text-white border-purple-700`
-    default: return baseClasses
+    case 'red':
+      return `${baseClasses} bg-red-500 text-white border-red-700`;
+    case 'blue':
+      return `${baseClasses} bg-blue-500 text-white border-blue-700`;
+    case 'green':
+      return `${baseClasses} bg-green-500 text-white border-green-700`;
+    case 'yellow':
+      return `${baseClasses} bg-yellow-400 text-black border-yellow-600`;
+    case 'wild':
+      return `${baseClasses} bg-gradient-to-br from-purple-600 to-pink-600 text-white border-purple-700`;
+    default:
+      return baseClasses;
   }
 }
 
 // Confetti component
 function Confetti() {
-  return (
-    <div className="fixed inset-0 pointer-events-none z-50">
-      {[...Array(50)].map((_, i) => (
-        <div
-          key={i}
-          className="absolute w-2 h-2 bg-gradient-to-br from-yellow-400 via-red-500 to-blue-500 rounded-full animate-bounce"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: `-10px`,
-            animationDelay: `${Math.random() * 2}s`,
-            animationDuration: `${2 + Math.random() * 2}s`
-          }}
-        />
-      ))}
-    </div>
-  )
+  return <div className="fixed inset-0 pointer-events-none z-50">
+      {[...Array(50)].map((_, i) => <div key={i} className="absolute w-2 h-2 bg-gradient-to-br from-yellow-400 via-red-500 to-blue-500 rounded-full animate-bounce" style={{
+      left: `${Math.random() * 100}%`,
+      top: `-10px`,
+      animationDelay: `${Math.random() * 2}s`,
+      animationDuration: `${2 + Math.random() * 2}s`
+    }} />)}
+    </div>;
 }
 
 // Color Selection Modal
-function ColorSelectModal({ onColorSelect, onClose }: { onColorSelect: (color: CardColor) => void, onClose: () => void }) {
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+function ColorSelectModal({
+  onColorSelect,
+  onClose
+}: {
+  onColorSelect: (color: CardColor) => void;
+  onClose: () => void;
+}) {
+  return <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg p-6 space-y-4">
         <h3 className="text-xl font-bold text-white text-center">Choose a Color</h3>
         <div className="grid grid-cols-2 gap-4">
-          {colors.map(color => (
-            <button
-              key={color}
-              onClick={() => onColorSelect(color)}
-              className={`w-16 h-16 rounded-lg ${getColorClasses(color)} hover:scale-110 transition-transform`}
-            >
-              <span className="text-white font-bold text-sm" style={{ textShadow: '1px 1px 0 black' }}>
+          {colors.map(color => <button key={color} onClick={() => onColorSelect(color)} className={`w-16 h-16 rounded-lg ${getColorClasses(color)} hover:scale-110 transition-transform`}>
+              <span className="text-white font-bold text-sm" style={{
+            textShadow: '1px 1px 0 black'
+          }}>
                 {color.toUpperCase()}
               </span>
-            </button>
-          ))}
+            </button>)}
         </div>
         <Button onClick={onClose} variant="outline" className="w-full">
           Cancel
         </Button>
       </div>
-    </div>
-  )
+    </div>;
 }
-
 export default function UnoGame() {
-  console.log('UnoGame component rendering...')
-  const [gameState, setGameState] = useState<GameState>('lobby')
-  const [game, setGame] = useState<Game | null>(null)
-  const [playerName, setPlayerName] = useState('')
-  const [maxPlayers, setMaxPlayers] = useState(4)
-  const [selectedColor, setSelectedColor] = useState<CardColor | null>(null)
-  const [playerId] = useState(() => Math.random().toString(36).substring(7))
-  const [showHistory, setShowHistory] = useState(false)
-  const [inviteCode, setInviteCode] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [selectedCards, setSelectedCards] = useState<UnoCard[]>([])
-  const [showColorSelect, setShowColorSelect] = useState(false)
-  const [pendingWildCards, setPendingWildCards] = useState<UnoCard[]>([])
-  const [expandedHand, setExpandedHand] = useState(false)
-  const [drawTimer, setDrawTimer] = useState<number | null>(null)
-  const [timerExpired, setTimerExpired] = useState(false)
-  const [joinGameCode, setJoinGameCode] = useState('')
-  const { toast } = useToast()
+  console.log('UnoGame component rendering...');
+  const [gameState, setGameState] = useState<GameState>('lobby');
+  const [game, setGame] = useState<Game | null>(null);
+  const [playerName, setPlayerName] = useState('');
+  const [maxPlayers, setMaxPlayers] = useState(4);
+  const [selectedColor, setSelectedColor] = useState<CardColor | null>(null);
+  const [playerId] = useState(() => Math.random().toString(36).substring(7));
+  const [showHistory, setShowHistory] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [selectedCards, setSelectedCards] = useState<UnoCard[]>([]);
+  const [showColorSelect, setShowColorSelect] = useState(false);
+  const [pendingWildCards, setPendingWildCards] = useState<UnoCard[]>([]);
+  const [expandedHand, setExpandedHand] = useState(false);
+  const [drawTimer, setDrawTimer] = useState<number | null>(null);
+  const [timerExpired, setTimerExpired] = useState(false);
+  const [joinGameCode, setJoinGameCode] = useState('');
+  const {
+    toast
+  } = useToast();
 
   // Prevent page refresh via scroll
   useEffect(() => {
-    let refreshWarned = false
+    let refreshWarned = false;
     const preventRefresh = (e: BeforeUnloadEvent) => {
       if (!refreshWarned) {
-        refreshWarned = true
-        e.preventDefault()
-        e.returnValue = 'You will exit the game if you refresh. Are you sure?'
-        return e.returnValue
+        refreshWarned = true;
+        e.preventDefault();
+        e.returnValue = 'You will exit the game if you refresh. Are you sure?';
+        return e.returnValue;
       }
-    }
-    
-    window.addEventListener('beforeunload', preventRefresh)
-    return () => window.removeEventListener('beforeunload', preventRefresh)
-  }, [])
+    };
+    window.addEventListener('beforeunload', preventRefresh);
+    return () => window.removeEventListener('beforeunload', preventRefresh);
+  }, []);
 
   // Timer effect for draw card response
   useEffect(() => {
@@ -217,101 +234,80 @@ export default function UnoGame() {
       const interval = setInterval(() => {
         setDrawTimer(prev => {
           if (prev && prev <= 1) {
-            setTimerExpired(true)
-            handleDrawTimeout()
-            return null
+            setTimerExpired(true);
+            handleDrawTimeout();
+            return null;
           }
-          return prev ? prev - 1 : null
-        })
-      }, 1000)
-      return () => clearInterval(interval)
+          return prev ? prev - 1 : null;
+        });
+      }, 1000);
+      return () => clearInterval(interval);
     }
-  }, [drawTimer])
+  }, [drawTimer]);
 
   // Check for invite code in URL and scroll to top
   useEffect(() => {
     // Always scroll to top when component loads
-    window.scrollTo(0, 0)
-    
-    const urlParams = new URLSearchParams(window.location.search)
-    const gameCode = urlParams.get('game')
+    window.scrollTo(0, 0);
+    const urlParams = new URLSearchParams(window.location.search);
+    const gameCode = urlParams.get('game');
     if (gameCode) {
-      setInviteCode(gameCode)
-      setGameState('joining')
+      setInviteCode(gameCode);
+      setGameState('joining');
     }
-  }, [])
+  }, []);
 
   // Real-time subscription with reconnection handling
   useEffect(() => {
-    if (!game?.id) return
-
-    const channel = supabase
-      .channel(`game-${game.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'games',
-          filter: `id=eq.${game.id}`
-        },
-        (payload) => {
-          console.log('Game change detected:', payload)
-          loadGame(game.id)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'players',
-          filter: `game_id=eq.${game.id}`
-        },
-        (payload) => {
-          console.log('Player change detected:', payload)
-          loadGame(game.id)
-        }
-      )
-      .subscribe()
-
+    if (!game?.id) return;
+    const channel = supabase.channel(`game-${game.id}`).on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'games',
+      filter: `id=eq.${game.id}`
+    }, payload => {
+      console.log('Game change detected:', payload);
+      loadGame(game.id);
+    }).on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'players',
+      filter: `game_id=eq.${game.id}`
+    }, payload => {
+      console.log('Player change detected:', payload);
+      loadGame(game.id);
+    }).subscribe();
     return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [game?.id])
+      supabase.removeChannel(channel);
+    };
+  }, [game?.id]);
 
   // Auto-reload game on page visibility change (handles reconnection)
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && game?.id) {
-        console.log('Page became visible, reloading game state...')
-        loadGame(game.id)
+        console.log('Page became visible, reloading game state...');
+        loadGame(game.id);
       }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [game?.id])
-
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [game?.id]);
   const loadGame = async (gameId: string) => {
     try {
       // Load game data
-      const { data: gameData, error: gameError } = await supabase
-        .from('games')
-        .select('*')
-        .eq('id', gameId)
-        .single()
-
-      if (gameError) throw gameError
+      const {
+        data: gameData,
+        error: gameError
+      } = await supabase.from('games').select('*').eq('id', gameId).single();
+      if (gameError) throw gameError;
 
       // Load players
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('*')
-        .eq('game_id', gameId)
-        .order('position')
-
-      if (playersError) throw playersError
+      const {
+        data: playersData,
+        error: playersError
+      } = await supabase.from('players').select('*').eq('game_id', gameId).order('position');
+      if (playersError) throw playersError;
 
       // Transform to match our interface
       const transformedGame: Game = {
@@ -326,7 +322,10 @@ export default function UnoGame() {
         currentColor: gameData.current_color as CardColor,
         drawCount: gameData.draw_count,
         lastPlayedCard: validateUnoCard(gameData.last_played_card),
-        playHistory: Array.isArray(gameData.play_history) ? gameData.play_history as { player: string; action: string }[] : [],
+        playHistory: Array.isArray(gameData.play_history) ? gameData.play_history as {
+          player: string;
+          action: string;
+        }[] : [],
         gameState: gameData.game_state,
         winnerId: gameData.winner_id,
         selectedCards: validateUnoCards(gameData.selected_cards),
@@ -342,833 +341,820 @@ export default function UnoGame() {
           position: p.position,
           isHost: p.is_host
         }))
-      }
+      };
+      setGame(transformedGame);
+      setGameState(transformedGame.gameState as GameState);
 
-      setGame(transformedGame)
-      setGameState(transformedGame.gameState as GameState)
-
-  // Handle timer for next player (not current)
+      // Handle timer for next player (not current)
       if (transformedGame.stackingTimer && transformedGame.pendingDrawTotal > 0) {
-        const nextPlayerIndex = (transformedGame.currentPlayerIndex + transformedGame.direction + transformedGame.players.length) % transformedGame.players.length
-        const nextPlayer = transformedGame.players[nextPlayerIndex]
+        const nextPlayerIndex = (transformedGame.currentPlayerIndex + transformedGame.direction + transformedGame.players.length) % transformedGame.players.length;
+        const nextPlayer = transformedGame.players[nextPlayerIndex];
         if (nextPlayer?.id === playerId) {
-          const timerEnd = new Date(transformedGame.stackingTimer).getTime()
-          const now = Date.now()
-          const remaining = Math.max(0, Math.ceil((timerEnd - now) / 1000))
-          setDrawTimer(remaining)
+          const timerEnd = new Date(transformedGame.stackingTimer).getTime();
+          const now = Date.now();
+          const remaining = Math.max(0, Math.ceil((timerEnd - now) / 1000));
+          setDrawTimer(remaining);
         } else {
-          setDrawTimer(null) // Clear timer if not our turn
+          setDrawTimer(null); // Clear timer if not our turn
         }
       } else {
-        setDrawTimer(null)
+        setDrawTimer(null);
       }
-
     } catch (error) {
-      console.error('Error loading game:', error)
+      console.error('Error loading game:', error);
     }
-  }
+  };
 
   // Card selection functions
   const selectCard = (card: UnoCard, cardIndex: number) => {
-    if (!game || !myPlayer || gameState !== 'playing') return
-    
+    if (!game || !myPlayer || gameState !== 'playing') return;
+
     // Check if it's the player's turn - allow during draw response mode
-    const isMyTurn = game.currentPlayerIndex === myPlayer.position
-    const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType
-    
+    const isMyTurn = game.currentPlayerIndex === myPlayer.position;
+    const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
     if (!isMyTurn && !inDrawResponseMode) {
       toast({
         title: "Not your turn",
         description: "Wait for your turn to select cards",
         variant: "destructive"
-      })
-      return
+      });
+      return;
     }
 
     // In draw response mode, only next player can play and only matching draw cards
     if (inDrawResponseMode) {
-      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length
-      const isNextPlayer = myPlayer.position === nextPlayerIndex
-      
+      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+      const isNextPlayer = myPlayer.position === nextPlayerIndex;
       if (!isNextPlayer) {
         toast({
           title: "Not your turn",
           description: "Only the next player can respond to draw cards",
           variant: "destructive"
-        })
-        return
+        });
+        return;
       }
-      
       if (!canPlayDrawCard(card)) {
         toast({
           title: "Invalid card",
           description: "You can only play matching draw cards or draw the cards",
           variant: "destructive"
-        })
-        return
+        });
+        return;
       }
     }
-
-    const isAlreadySelected = selectedCards.some(c => c.id === card.id)
-    
+    const isAlreadySelected = selectedCards.some(c => c.id === card.id);
     if (isAlreadySelected) {
       // Deselect card
-      setSelectedCards(prev => prev.filter(c => c.id !== card.id))
+      setSelectedCards(prev => prev.filter(c => c.id !== card.id));
     } else {
       // Select card - validate for stacking
       if (selectedCards.length === 0) {
         // First card - check if it can be played
         if (canPlayCard(card)) {
-          setSelectedCards([card])
+          setSelectedCards([card]);
         } else {
           toast({
             title: "Invalid card",
             description: "This card cannot be played",
             variant: "destructive"
-          })
+          });
         }
       } else {
         // Additional card - must match value for stacking
-        const firstCard = selectedCards[0]
+        const firstCard = selectedCards[0];
         if (canStackCard(firstCard, card)) {
-          setSelectedCards(prev => [...prev, card])
+          setSelectedCards(prev => [...prev, card]);
         } else {
           toast({
             title: "Cannot stack",
             description: "You can only stack cards with the same value",
             variant: "destructive"
-          })
+          });
         }
       }
     }
-  }
-
+  };
   const canStackCard = (firstCard: UnoCard, newCard: UnoCard): boolean => {
     // For number cards, stack same numbers regardless of color
     if (firstCard.type === 'number' && newCard.type === 'number') {
-      return firstCard.value === newCard.value
+      return firstCard.value === newCard.value;
     }
-    
+
     // For special cards (draw2, skip, reverse), stack same type regardless of color
     if (firstCard.type === newCard.type && firstCard.type !== 'number' && firstCard.type !== 'wild' && firstCard.type !== 'wild4') {
-      return true
+      return true;
     }
-    
-    return false
-  }
-
+    return false;
+  };
   const canPlayCard = (card: UnoCard): boolean => {
-    if (!topCard || !game) return false
-    
+    if (!topCard || !game) return false;
+
     // In draw response mode, only matching draw cards allowed
     if (game.pendingDrawTotal > 0 && game.pendingDrawType) {
-      return canPlayDrawCard(card)
+      return canPlayDrawCard(card);
     }
-    
+
     // Wild cards can always be played (except during draw response)
-    if (card.color === 'wild') return true
-    
+    if (card.color === 'wild') return true;
+
     // For stacking validation, check bottom card of discard pile for matching
-    const baseCard = selectedCards.length > 0 ? topCard : topCard
-    const currentColor = game.currentColor
-    
+    const baseCard = selectedCards.length > 0 ? topCard : topCard;
+    const currentColor = game.currentColor;
+
     // For first card in a stack, must match current game state
     if (selectedCards.length === 0) {
       // Match current color
-      if (card.color === currentColor) return true
-      
+      if (card.color === currentColor) return true;
+
       // Match number value
-      if (card.type === 'number' && baseCard.type === 'number' && card.value === baseCard.value) return true
-      
+      if (card.type === 'number' && baseCard.type === 'number' && card.value === baseCard.value) return true;
+
       // Match special card type (skip, reverse, draw2) but not wild types
-      if (card.type === baseCard.type && card.type !== 'wild' && card.type !== 'wild4') return true
+      if (card.type === baseCard.type && card.type !== 'wild' && card.type !== 'wild4') return true;
     }
-    
-    return false
-  }
-
+    return false;
+  };
   const canPlayDrawCard = (card: UnoCard): boolean => {
-    if (!game.pendingDrawType) return false
-    
-    // Can only play matching draw card type
-    if (game.pendingDrawType === 'draw2' && card.type === 'draw2') return true
-    if (game.pendingDrawType === 'wild4' && card.type === 'wild4') return true
-    
-    return false
-  }
+    if (!game.pendingDrawType) return false;
 
+    // Can only play matching draw card type
+    if (game.pendingDrawType === 'draw2' && card.type === 'draw2') return true;
+    if (game.pendingDrawType === 'wild4' && card.type === 'wild4') return true;
+    return false;
+  };
   const playSelectedCards = async () => {
-    if (!game || !myPlayer || selectedCards.length === 0) return
+    if (!game || !myPlayer || selectedCards.length === 0) return;
 
     // Check if cards contain wild cards and need color selection
-    const hasWild = selectedCards.some(card => card.color === 'wild')
+    const hasWild = selectedCards.some(card => card.color === 'wild');
     if (hasWild && !selectedColor) {
-      setPendingWildCards(selectedCards)
-      setShowColorSelect(true)
-      return
+      setPendingWildCards(selectedCards);
+      setShowColorSelect(true);
+      return;
     }
-
-    await executeCardPlay(selectedCards, selectedColor || null)
-  }
-
+    await executeCardPlay(selectedCards, selectedColor || null);
+  };
   const executeCardPlay = async (cards: UnoCard[], chosenColor: CardColor | null) => {
-    if (!game || !myPlayer) return
-
+    if (!game || !myPlayer) return;
     try {
       // Remove cards from player's hand
-      const newHand = [...myPlayer.hand]
+      const newHand = [...myPlayer.hand];
       cards.forEach(card => {
-        const index = newHand.findIndex(c => c.id === card.id)
+        const index = newHand.findIndex(c => c.id === card.id);
         if (index !== -1) {
-          newHand.splice(index, 1)
+          newHand.splice(index, 1);
         }
-      })
+      });
 
       // Update player's hand
-      await supabase
-        .from('players')
-        .update({ hand: newHand as any })
-        .eq('game_id', game.id)
-        .eq('player_id', playerId)
+      await supabase.from('players').update({
+        hand: newHand as any
+      }).eq('game_id', game.id).eq('player_id', playerId);
 
       // Calculate effects based on card types
-      const { nextPlayerIndex, newDirection, drawEffects, skipEffects } = calculateCardEffects(cards)
-      
-      // Handle draw card stacking
-      let newPendingDrawTotal = game.pendingDrawTotal
-      let newPendingDrawType = game.pendingDrawType
-      let newStackingTimer = game.stackingTimer
+      const {
+        nextPlayerIndex,
+        newDirection,
+        drawEffects,
+        skipEffects
+      } = calculateCardEffects(cards);
 
+      // Handle draw card stacking
+      let newPendingDrawTotal = game.pendingDrawTotal;
+      let newPendingDrawType = game.pendingDrawType;
+      let newStackingTimer = game.stackingTimer;
       if (cards.some(c => c.type === 'draw2' || c.type === 'wild4')) {
-        const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4')
+        const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4');
         const drawAmount = drawCards.reduce((sum, card) => {
-          return sum + (card.type === 'draw2' ? 2 : 4)
-        }, 0)
-        
-        newPendingDrawTotal += drawAmount
-        newPendingDrawType = drawCards[0].type === 'draw2' ? 'draw2' : 'wild4'
-        
+          return sum + (card.type === 'draw2' ? 2 : 4);
+        }, 0);
+        newPendingDrawTotal += drawAmount;
+        newPendingDrawType = drawCards[0].type === 'draw2' ? 'draw2' : 'wild4';
+
         // Set 5-second timer for next player
-        newStackingTimer = new Date(Date.now() + 5000).toISOString()
+        newStackingTimer = new Date(Date.now() + 5000).toISOString();
       } else if (game.pendingDrawTotal > 0) {
         // Clear pending draw if non-draw cards played
-        newPendingDrawTotal = 0
-        newPendingDrawType = null
-        newStackingTimer = null
+        newPendingDrawTotal = 0;
+        newPendingDrawType = null;
+        newStackingTimer = null;
       }
 
       // Determine new color
-      let newColor = chosenColor || cards[cards.length - 1].color
+      let newColor = chosenColor || cards[cards.length - 1].color;
       if (newColor === 'wild') {
-        newColor = game.currentColor // Keep current color if no choice made
+        newColor = game.currentColor; // Keep current color if no choice made
       }
 
       // Create stacked discard pile
-      const newStackedDiscard = [...cards]
-      const newDiscardPile = [...game.discardPile, ...cards]
+      const newStackedDiscard = [...cards];
+      const newDiscardPile = [...game.discardPile, ...cards];
 
       // Create play history entry
       // Create play history entry with proper wild card handling
-      let actionText = ''
+      let actionText = '';
       if (cards.length === 1) {
-        const card = cards[0]
+        const card = cards[0];
         if (card.type === 'wild4') {
-          actionText = `wild draw 4`
+          actionText = `wild draw 4`;
         } else if (card.type === 'wild') {
-          actionText = `wild-${chosenColor || game.currentColor}`
+          actionText = `wild-${chosenColor || game.currentColor}`;
         } else if (card.type === 'number') {
-          actionText = `${card.color} ${card.value}`
+          actionText = `${card.color} ${card.value}`;
         } else {
-          actionText = `${card.color} ${card.type}`
+          actionText = `${card.color} ${card.type}`;
         }
       } else {
-        const card = cards[0]
+        const card = cards[0];
         if (card.type === 'number') {
-          actionText = `${cards.length} ${card.value}s`
+          actionText = `${cards.length} ${card.value}s`;
         } else {
-          actionText = `${cards.length} ${card.type}s`
+          actionText = `${cards.length} ${card.type}s`;
         }
       }
-      
       const newPlayHistory = [...game.playHistory, {
         player: myPlayer.name,
         action: actionText
-      }]
+      }];
 
       // Update game state
-      await supabase
-        .from('games')
-        .update({
-          discard_pile: newDiscardPile as any,
-          stacked_discard: newStackedDiscard as any,
-          current_color: newColor,
-          current_player_index: nextPlayerIndex,
-          direction: newDirection,
-          play_history: newPlayHistory as any,
-          last_played_card: cards[cards.length - 1] as any,
-          pending_draw_total: newPendingDrawTotal,
-          pending_draw_type: newPendingDrawType,
-          stacking_timer: newStackingTimer,
-          selected_cards: [] as any,
-          winner_id: newHand.length === 0 ? playerId : null,
-          game_state: newHand.length === 0 ? 'ended' : 'playing'
-        })
-        .eq('id', game.id)
+      await supabase.from('games').update({
+        discard_pile: newDiscardPile as any,
+        stacked_discard: newStackedDiscard as any,
+        current_color: newColor,
+        current_player_index: nextPlayerIndex,
+        direction: newDirection,
+        play_history: newPlayHistory as any,
+        last_played_card: cards[cards.length - 1] as any,
+        pending_draw_total: newPendingDrawTotal,
+        pending_draw_type: newPendingDrawType,
+        stacking_timer: newStackingTimer,
+        selected_cards: [] as any,
+        winner_id: newHand.length === 0 ? playerId : null,
+        game_state: newHand.length === 0 ? 'ended' : 'playing'
+      }).eq('id', game.id);
 
       // Clear selections
-      setSelectedCards([])
-      setSelectedColor(null)
-      setPendingWildCards([])
-      setShowColorSelect(false)
+      setSelectedCards([]);
+      setSelectedColor(null);
+      setPendingWildCards([]);
+      setShowColorSelect(false);
 
       // Show win message
       if (newHand.length === 0) {
         toast({
           title: "Congratulations!",
-          description: "You won the game!",
-        })
+          description: "You won the game!"
+        });
       }
-
     } catch (error) {
-      console.error('Error playing cards:', error)
+      console.error('Error playing cards:', error);
       toast({
         title: "Error",
         description: "Failed to play cards",
         variant: "destructive"
-      })
+      });
     }
-  }
-
+  };
   const calculateCardEffects = (cards: UnoCard[]) => {
-    if (!game) return { nextPlayerIndex: 0, newDirection: 1, drawEffects: 0, skipEffects: 0 }
-
-    let nextPlayerIndex = game.currentPlayerIndex
-    let newDirection = game.direction
-    let skipCount = 0
-
+    if (!game) return {
+      nextPlayerIndex: 0,
+      newDirection: 1,
+      drawEffects: 0,
+      skipEffects: 0
+    };
+    let nextPlayerIndex = game.currentPlayerIndex;
+    let newDirection = game.direction;
+    let skipCount = 0;
     cards.forEach(card => {
       switch (card.type) {
         case 'reverse':
-          newDirection *= -1
+          newDirection *= -1;
           if (game.players.length === 2) {
-            skipCount += 1 // In 2-player games, reverse acts as skip
+            skipCount += 1; // In 2-player games, reverse acts as skip
           }
-          break
+          break;
         case 'skip':
-          skipCount += 1
-          break
+          skipCount += 1;
+          break;
         // Remove auto-skip for draw cards - they only skip when stacked
         case 'draw2':
         case 'wild4':
           // Don't auto-skip - next player has choice to draw or play matching card
-          break
+          break;
       }
-    })
+    });
 
     // Handle skip stacking - current player doesn't get skipped
     if (skipCount > 0) {
       // Skip the next player(s), but keep current player's turn if stacking
-      if (game.players.length === 2 && cards.some(c => c.type === 'skip' || (c.type === 'reverse' && game.players.length === 2))) {
+      if (game.players.length === 2 && cards.some(c => c.type === 'skip' || c.type === 'reverse' && game.players.length === 2)) {
         // In 2-player games with skip stacking, current player gets additional turns
-        return { nextPlayerIndex, newDirection, drawEffects: 0, skipEffects: skipCount }
+        return {
+          nextPlayerIndex,
+          newDirection,
+          drawEffects: 0,
+          skipEffects: skipCount
+        };
       } else {
         // Multi-player skip stacking
         for (let i = 0; i < skipCount; i++) {
-          nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length
+          nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length;
         }
       }
     }
 
     // Handle even number of reverses in non-2-player games  
     if (cards.filter(c => c.type === 'reverse').length % 2 === 0 && game.players.length > 2) {
-      newDirection = game.direction // Direction stays the same
+      newDirection = game.direction; // Direction stays the same
       // Player gets another turn
-      return { nextPlayerIndex: game.currentPlayerIndex, newDirection, drawEffects: 0, skipEffects: skipCount }
+      return {
+        nextPlayerIndex: game.currentPlayerIndex,
+        newDirection,
+        drawEffects: 0,
+        skipEffects: skipCount
+      };
     }
 
     // Normal turn progression for non-skip cards
     if (skipCount === 0 && !cards.some(c => c.type === 'draw2' || c.type === 'wild4')) {
-      nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length
+      nextPlayerIndex = (nextPlayerIndex + newDirection + game.players.length) % game.players.length;
     }
-
-    return { nextPlayerIndex, newDirection, drawEffects: 0, skipEffects: skipCount }
-  }
-
+    return {
+      nextPlayerIndex,
+      newDirection,
+      drawEffects: 0,
+      skipEffects: skipCount
+    };
+  };
   const handleColorSelect = (color: CardColor) => {
-    setSelectedColor(color)
-    setShowColorSelect(false)
-    
+    setSelectedColor(color);
+    setShowColorSelect(false);
     if (pendingWildCards.length > 0) {
-      executeCardPlay(pendingWildCards, color)
+      executeCardPlay(pendingWildCards, color);
     }
-  }
-
+  };
   const handleDrawTimeout = async () => {
-    if (!game) return
-
+    if (!game) return;
     try {
       // The next player (not current) must draw the pending cards
-      const targetPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length
-      const targetPlayer = game.players[targetPlayerIndex]
-      
+      const targetPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
+      const targetPlayer = game.players[targetPlayerIndex];
+
       // Only the target player should execute this
-      if (targetPlayer?.id !== playerId) return
-      
-      const newHand = [...targetPlayer.hand]
-      const newDrawPile = [...game.drawPile]
-      
+      if (targetPlayer?.id !== playerId) return;
+      const newHand = [...targetPlayer.hand];
+      const newDrawPile = [...game.drawPile];
       for (let i = 0; i < game.pendingDrawTotal; i++) {
         if (newDrawPile.length > 0) {
-        newHand.unshift(newDrawPile.pop()!) // Add new cards to the left
+          newHand.unshift(newDrawPile.pop()!); // Add new cards to the left
         }
       }
-      
+
       // Update target player's hand
-      await supabase
-        .from('players')
-        .update({ hand: newHand as any })
-        .eq('game_id', game.id)
-        .eq('player_id', targetPlayer.id)
+      await supabase.from('players').update({
+        hand: newHand as any
+      }).eq('game_id', game.id).eq('player_id', targetPlayer.id);
 
       // Move to next player after target and clear pending draw
-      const nextPlayerIndex = (targetPlayerIndex + game.direction + game.players.length) % game.players.length
-      
-      await supabase
-        .from('games')
-        .update({
-          current_player_index: nextPlayerIndex,
-          pending_draw_total: 0,
-          pending_draw_type: null,
-          stacking_timer: null,
-          draw_pile: newDrawPile as any,
-          play_history: [...game.playHistory, {
-            player: targetPlayer.name,
-            action: `drew +${game.pendingDrawTotal} cards (timer expired)`
-          }] as any
-        })
-        .eq('id', game.id)
-
+      const nextPlayerIndex = (targetPlayerIndex + game.direction + game.players.length) % game.players.length;
+      await supabase.from('games').update({
+        current_player_index: nextPlayerIndex,
+        pending_draw_total: 0,
+        pending_draw_type: null,
+        stacking_timer: null,
+        draw_pile: newDrawPile as any,
+        play_history: [...game.playHistory, {
+          player: targetPlayer.name,
+          action: `drew +${game.pendingDrawTotal} cards (timer expired)`
+        }] as any
+      }).eq('id', game.id);
       toast({
         title: `${targetPlayer.name} drew +${game.pendingDrawTotal} cards`,
         description: "Time ran out for draw card response",
         variant: "destructive"
-      })
-
+      });
     } catch (error) {
-      console.error('Error handling draw timeout:', error)
+      console.error('Error handling draw timeout:', error);
     }
-  }
+  };
 
   // Draw card from pile
   const drawCards = async () => {
-    if (!game || !myPlayer || gameState !== 'playing') return
-    
+    if (!game || !myPlayer || gameState !== 'playing') return;
+
     // Check if it's the player's turn
     if (game.currentPlayerIndex !== myPlayer.position) {
       toast({
         title: "Not your turn",
         description: "Wait for your turn to draw",
         variant: "destructive"
-      })
-      return
+      });
+      return;
     }
-
     try {
-      const newDrawPile = [...game.drawPile]
-      const newHand = [...myPlayer.hand]
-      
+      const newDrawPile = [...game.drawPile];
+      const newHand = [...myPlayer.hand];
+
       // If there are pending draw cards, draw all of them and skip turn
       // Otherwise, draw 1 card and continue turn (player must play a card)
-      const drawAmount = game.pendingDrawTotal > 0 ? game.pendingDrawTotal : 1
-      const shouldSkipTurn = game.pendingDrawTotal > 0
-      
+      const drawAmount = game.pendingDrawTotal > 0 ? game.pendingDrawTotal : 1;
+      const shouldSkipTurn = game.pendingDrawTotal > 0;
       for (let i = 0; i < drawAmount; i++) {
         if (newDrawPile.length === 0) {
           toast({
             title: "No cards left",
             description: "The draw pile is empty",
             variant: "destructive"
-          })
-          return
+          });
+          return;
         }
-        newHand.unshift(newDrawPile.pop()!) // Add new cards to the left
+        newHand.unshift(newDrawPile.pop()!); // Add new cards to the left
       }
-      
+
       // Update player's hand
-      await supabase
-        .from('players')
-        .update({ hand: newHand as any })
-        .eq('game_id', game.id)
-        .eq('player_id', playerId)
+      await supabase.from('players').update({
+        hand: newHand as any
+      }).eq('game_id', game.id).eq('player_id', playerId);
 
       // Only move to next player if forced to draw due to draw cards
-      let nextPlayerIndex = game.currentPlayerIndex
+      let nextPlayerIndex = game.currentPlayerIndex;
       if (shouldSkipTurn) {
-        nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length
+        nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
       }
-      
       const newPlayHistory = [...game.playHistory, {
         player: myPlayer.name,
         action: drawAmount > 1 ? `drew +${drawAmount} cards` : 'drew 1 card'
-      }]
-
-      await supabase
-        .from('games')
-        .update({
-          draw_pile: newDrawPile as any,
-          current_player_index: nextPlayerIndex,
-          pending_draw_total: shouldSkipTurn ? 0 : game.pendingDrawTotal,
-          pending_draw_type: shouldSkipTurn ? null : game.pendingDrawType,
-          stacking_timer: shouldSkipTurn ? null : game.stackingTimer,
-          play_history: newPlayHistory as any
-        })
-        .eq('id', game.id)
+      }];
+      await supabase.from('games').update({
+        draw_pile: newDrawPile as any,
+        current_player_index: nextPlayerIndex,
+        pending_draw_total: shouldSkipTurn ? 0 : game.pendingDrawTotal,
+        pending_draw_type: shouldSkipTurn ? null : game.pendingDrawType,
+        stacking_timer: shouldSkipTurn ? null : game.stackingTimer,
+        play_history: newPlayHistory as any
+      }).eq('id', game.id);
 
       // Clear timer state only if turn ends
       if (shouldSkipTurn) {
-        setDrawTimer(null)
-        setTimerExpired(false)
+        setDrawTimer(null);
+        setTimerExpired(false);
       }
 
       // Show message about turn rules
       if (!shouldSkipTurn) {
         toast({
           title: "Continue your turn",
-          description: "You must play a card or draw more cards",
-        })
+          description: "You must play a card or draw more cards"
+        });
       }
-
     } catch (error) {
-      console.error('Error drawing card:', error)
+      console.error('Error drawing card:', error);
       toast({
         title: "Error",
         description: "Failed to draw card",
         variant: "destructive"
-      })
+      });
     }
-  }
-
+  };
   const createGame = async () => {
-    if (!playerName.trim()) return
-
+    if (!playerName.trim()) return;
     try {
-      const deck = shuffleDeck(generateDeck())
-      const playerHand = deck.splice(0, 7)
-      const discardPile = [deck.pop()!]
-      const gameCode = generateInviteCode()
-
-      const { data: gameData, error: gameError } = await supabase
-        .from('games')
-        .insert({
-          host_id: playerId,
-          invite_code: gameCode,
-          max_players: maxPlayers,
-          current_player_index: 0,
-          direction: 1,
-          draw_pile: deck as any,
-          discard_pile: discardPile as any,
-          current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
-          game_state: 'waiting'
-        })
-        .select()
-        .single()
-
-      if (gameError) throw gameError
-
-      await supabase
-        .from('players')
-        .insert({
-          game_id: gameData.id,
-          player_id: playerId,
-          name: playerName,
-          hand: playerHand as any,
-          position: 0,
-          is_host: true
-        })
-
-      await loadGame(gameData.id)
-      setGameState('waiting')
+      const deck = shuffleDeck(generateDeck());
+      const playerHand = deck.splice(0, 7);
+      const discardPile = [deck.pop()!];
+      const gameCode = generateInviteCode();
+      const {
+        data: gameData,
+        error: gameError
+      } = await supabase.from('games').insert({
+        host_id: playerId,
+        invite_code: gameCode,
+        max_players: maxPlayers,
+        current_player_index: 0,
+        direction: 1,
+        draw_pile: deck as any,
+        discard_pile: discardPile as any,
+        current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
+        game_state: 'waiting'
+      }).select().single();
+      if (gameError) throw gameError;
+      await supabase.from('players').insert({
+        game_id: gameData.id,
+        player_id: playerId,
+        name: playerName,
+        hand: playerHand as any,
+        position: 0,
+        is_host: true
+      });
+      await loadGame(gameData.id);
+      setGameState('waiting');
     } catch (error) {
-      console.error('Error creating game:', error)
+      console.error('Error creating game:', error);
       toast({
         title: "Error",
         description: "Failed to create game",
         variant: "destructive"
-      })
+      });
     }
-  }
-
+  };
   const createGameWithBots = async () => {
-    await createGame()
+    await createGame();
     // ... implement bot creation logic
-  }
-
+  };
   const joinGame = async () => {
-    if (!playerName.trim() || !inviteCode.trim()) return
-
+    if (!playerName.trim() || !inviteCode.trim()) return;
     try {
-      const { data: gameData, error: gameError } = await supabase
-        .from('games')
-        .select('*')
-        .eq('invite_code', inviteCode.toUpperCase())
-        .single()
-
-      if (gameError) throw gameError
-
-      const { data: existingPlayers } = await supabase
-        .from('players')
-        .select('*')
-        .eq('game_id', gameData.id)
-
+      const {
+        data: gameData,
+        error: gameError
+      } = await supabase.from('games').select('*').eq('invite_code', inviteCode.toUpperCase()).single();
+      if (gameError) throw gameError;
+      const {
+        data: existingPlayers
+      } = await supabase.from('players').select('*').eq('game_id', gameData.id);
       if (existingPlayers && existingPlayers.length >= gameData.max_players) {
         toast({
           title: "Game full",
           description: "This game is already full",
           variant: "destructive"
-        })
-        return
+        });
+        return;
       }
+      const deck = shuffleDeck(generateDeck());
+      const playerHand = deck.splice(0, 7);
+      await supabase.from('games').update({
+        draw_pile: [...validateUnoCards(gameData.draw_pile).slice(0, -7), ...deck] as any
+      }).eq('id', gameData.id);
+      await supabase.from('players').insert({
+        game_id: gameData.id,
+        player_id: playerId,
+        name: playerName,
+        hand: playerHand as any,
+        position: existingPlayers?.length || 0,
+        is_host: false
+      });
+      await loadGame(gameData.id);
+      setGameState('playing'); // Join directly into game
 
-      const deck = shuffleDeck(generateDeck())
-      const playerHand = deck.splice(0, 7)
-
-        await supabase
-        .from('games')
-        .update({
-          draw_pile: [
-            ...validateUnoCards(gameData.draw_pile).slice(0, -7),
-            ...deck
-          ] as any
-        })
-        .eq('id', gameData.id)
-
-      await supabase
-        .from('players')
-        .insert({
-          game_id: gameData.id,
-          player_id: playerId,
-          name: playerName,
-          hand: playerHand as any,
-          position: existingPlayers?.length || 0,
-          is_host: false
-        })
-
-      await loadGame(gameData.id)
-      setGameState('playing') // Join directly into game
-      
       // Scroll to top for new players
-      window.scrollTo(0, 0)
+      window.scrollTo(0, 0);
     } catch (error) {
-      console.error('Error joining game:', error)
+      console.error('Error joining game:', error);
       toast({
         title: "Error",
         description: "Failed to join game",
         variant: "destructive"
-      })
+      });
     }
-  }
-
+  };
   const startGame = async () => {
-    if (!game || game.players.length < 2) return
-
-    await supabase
-      .from('games')
-      .update({ game_state: 'playing' })
-      .eq('id', game.id)
-  }
-
+    if (!game || game.players.length < 2) return;
+    await supabase.from('games').update({
+      game_state: 'playing'
+    }).eq('id', game.id);
+  };
   const copyInviteLink = () => {
-    const link = `${window.location.origin}?game=${game?.inviteCode}`
-    navigator.clipboard.writeText(link)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    const link = `${window.location.origin}?game=${game?.inviteCode}`;
+    navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
     toast({
       title: "Invite link copied!",
       description: "Share this link with other players"
-    })
-  }
+    });
+  };
 
   // Sort player hand - prioritize numbers first, then specials to the left
   const sortHand = async () => {
-    if (!myPlayer) return
-    
+    if (!myPlayer) return;
     const sortedHand = [...myPlayer.hand].sort((a, b) => {
       // Special cards first (to the left)
-      const aIsSpecial = a.type !== 'number'
-      const bIsSpecial = b.type !== 'number'
-      
-      if (aIsSpecial && !bIsSpecial) return -1
-      if (!aIsSpecial && bIsSpecial) return 1
-      
+      const aIsSpecial = a.type !== 'number';
+      const bIsSpecial = b.type !== 'number';
+      if (aIsSpecial && !bIsSpecial) return -1;
+      if (!aIsSpecial && bIsSpecial) return 1;
+
       // For number cards, sort by number value first, then color
       if (a.type === 'number' && b.type === 'number') {
-        const numberDiff = (a.value || 0) - (b.value || 0)
-        if (numberDiff !== 0) return numberDiff
-        
+        const numberDiff = (a.value || 0) - (b.value || 0);
+        if (numberDiff !== 0) return numberDiff;
+
         // Same number, sort by color
-        const colorOrder = { 'red': 0, 'blue': 1, 'green': 2, 'yellow': 3 }
-        return colorOrder[a.color] - colorOrder[b.color]
+        const colorOrder = {
+          'red': 0,
+          'blue': 1,
+          'green': 2,
+          'yellow': 3
+        };
+        return colorOrder[a.color] - colorOrder[b.color];
       }
-      
+
       // For special cards, sort by type then color
       if (aIsSpecial && bIsSpecial) {
-        const typeOrder = { 'skip': 0, 'reverse': 1, 'draw2': 2, 'wild': 3, 'wild4': 4 }
-        const typeDiff = typeOrder[a.type] - typeOrder[b.type]
-        if (typeDiff !== 0) return typeDiff
-        
+        const typeOrder = {
+          'skip': 0,
+          'reverse': 1,
+          'draw2': 2,
+          'wild': 3,
+          'wild4': 4
+        };
+        const typeDiff = typeOrder[a.type] - typeOrder[b.type];
+        if (typeDiff !== 0) return typeDiff;
         if (a.color !== 'wild' && b.color !== 'wild') {
-          const colorOrder = { 'red': 0, 'blue': 1, 'green': 2, 'yellow': 3 }
-          return colorOrder[a.color] - colorOrder[b.color]
+          const colorOrder = {
+            'red': 0,
+            'blue': 1,
+            'green': 2,
+            'yellow': 3
+          };
+          return colorOrder[a.color] - colorOrder[b.color];
         }
       }
-      
-      return 0
-    })
-    
-    await supabase
-      .from('players')
-      .update({ hand: sortedHand as any })
-      .eq('game_id', game?.id)
-      .eq('player_id', playerId)
-  }
+      return 0;
+    });
+    await supabase.from('players').update({
+      hand: sortedHand as any
+    }).eq('game_id', game?.id).eq('player_id', playerId);
+  };
 
   // Visual helper functions
   const getCardColorClasses = (card: UnoCard): string => {
-    const baseClasses = "uno-card border-2 border-white"
-    
+    const baseClasses = "uno-card border-2 border-white";
     switch (card.color) {
-      case 'red': return `${baseClasses} uno-card-red`
-      case 'blue': return `${baseClasses} uno-card-blue`
-      case 'green': return `${baseClasses} uno-card-green`
-      case 'yellow': return `${baseClasses} uno-card-yellow`
-      case 'wild': return `${baseClasses} uno-card-wild`
-      default: return baseClasses
+      case 'red':
+        return `${baseClasses} uno-card-red`;
+      case 'blue':
+        return `${baseClasses} uno-card-blue`;
+      case 'green':
+        return `${baseClasses} uno-card-green`;
+      case 'yellow':
+        return `${baseClasses} uno-card-yellow`;
+      case 'wild':
+        return `${baseClasses} uno-card-wild`;
+      default:
+        return baseClasses;
     }
-  }
-
-
+  };
   const getColorIndicatorClass = (color: CardColor): string => {
     switch (color) {
-      case 'red': return 'bg-red-600 text-white'
-      case 'blue': return 'bg-blue-600 text-white'
-      case 'green': return 'bg-green-600 text-white'
-      case 'yellow': return 'bg-yellow-500 text-black'
-      case 'wild': return 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 to-blue-500 text-white'
-      default: return 'bg-gray-600 text-white'
+      case 'red':
+        return 'bg-red-600 text-white';
+      case 'blue':
+        return 'bg-blue-600 text-white';
+      case 'green':
+        return 'bg-green-600 text-white';
+      case 'yellow':
+        return 'bg-yellow-500 text-black';
+      case 'wild':
+        return 'bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 to-blue-500 text-white';
+      default:
+        return 'bg-gray-600 text-white';
     }
-  }
-
+  };
   const renderCard = (card: UnoCard, index?: number, onClick?: () => void, isSmall = false, isSelected = false) => {
-    const sizeClasses = isSmall ? 'w-8 h-12 text-xs' : 'w-12 h-16 sm:w-14 sm:h-20'
-    const selectedClasses = isSelected ? 'ring-2 ring-blue-400 transform -translate-y-2' : ''
-    const selectionNumber = selectedCards.findIndex(c => c.id === card.id) + 1
-    
-    return (
-      <div
-        key={card.id}
-        className={`${getCardColorClasses(card)} ${sizeClasses} ${selectedClasses} flex items-center justify-center cursor-pointer relative transition-all duration-200`}
-        onClick={onClick}
-      >
-        {isSelected && (
-          <div className="absolute -top-3 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10">
+    const sizeClasses = isSmall ? 'w-8 h-12 text-xs' : 'w-12 h-16 sm:w-14 sm:h-20';
+    const selectedClasses = isSelected ? 'ring-2 ring-blue-400 transform -translate-y-2' : '';
+    const selectionNumber = selectedCards.findIndex(c => c.id === card.id) + 1;
+    return <div key={card.id} className={`${getCardColorClasses(card)} ${sizeClasses} ${selectedClasses} flex items-center justify-center cursor-pointer relative transition-all duration-200`} onClick={onClick}>
+        {isSelected && <div className="absolute -top-3 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold z-10">
             {selectionNumber}
-          </div>
-        )}
+          </div>}
         
         {/* Top-left corner with black outline */}
-        <div className="absolute top-1 left-1 text-white font-bold text-xs" style={{ textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black' }}>
-          {card.type === 'number' ? card.value :
-           card.type === 'skip' ? 'S' :
-           card.type === 'reverse' ? 'R' :
-           card.type === 'draw2' ? '+2' :
-           card.type === 'wild' ? 'W' : '+4'}
+        <div className="absolute top-1 left-1 text-white font-bold text-xs" style={{
+        textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black'
+      }}>
+          {card.type === 'number' ? card.value : card.type === 'skip' ? 'S' : card.type === 'reverse' ? 'R' : card.type === 'draw2' ? '+2' : card.type === 'wild' ? 'W' : '+4'}
         </div>
         
         {/* Center display with black outline */}
-        <div className="text-white font-bold text-lg" style={{ textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black' }}>
-          {card.type === 'number' ? card.value :
-           card.type === 'skip' ? 'S' :
-           card.type === 'reverse' ? 'R' :
-           card.type === 'draw2' ? '+2' :
-           card.type === 'wild' ? 'W' : '+4'}
+        <div className="text-white font-bold text-lg" style={{
+        textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black'
+      }}>
+          {card.type === 'number' ? card.value : card.type === 'skip' ? 'S' : card.type === 'reverse' ? 'R' : card.type === 'draw2' ? '+2' : card.type === 'wild' ? 'W' : '+4'}
         </div>
         
         {/* Bottom-right corner with black outline */}
-        <div className="absolute bottom-1 right-1 text-white font-bold text-xs" style={{ textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black' }}>
-          {card.type === 'number' ? card.value :
-           card.type === 'skip' ? 'S' :
-           card.type === 'reverse' ? 'R' :
-           card.type === 'draw2' ? '+2' :
-           card.type === 'wild' ? 'W' : '+4'}
+        <div className="absolute bottom-1 right-1 text-white font-bold text-xs" style={{
+        textShadow: '1px 1px 0 black, -1px -1px 0 black, 1px -1px 0 black, -1px 1px 0 black'
+      }}>
+          {card.type === 'number' ? card.value : card.type === 'skip' ? 'S' : card.type === 'reverse' ? 'R' : card.type === 'draw2' ? '+2' : card.type === 'wild' ? 'W' : '+4'}
         </div>
-      </div>
-    )
-  }
+      </div>;
+  };
 
   // Hexagon positioning for players
   const getPlayerPosition = (index: number, totalPlayers: number) => {
     const positions = {
-      2: [
-        { top: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { bottom: '10%', left: '50%', transform: 'translateX(-50%)' }
-      ],
-      3: [
-        { top: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { bottom: '10%', left: '20%', transform: 'translateX(-50%)' },
-        { bottom: '10%', left: '80%', transform: 'translateX(-50%)' }
-      ],
-      4: [
-        { top: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { top: '50%', right: '10%', transform: 'translateY(-50%)' },
-        { bottom: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { top: '50%', left: '10%', transform: 'translateY(-50%)' }
-      ],
-      5: [
-        { top: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { top: '25%', right: '15%', transform: 'translateY(-50%)' },
-        { bottom: '25%', right: '15%', transform: 'translateY(50%)' },
-        { bottom: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { bottom: '25%', left: '15%', transform: 'translateY(50%)' }
-      ],
-      6: [
-        { top: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { top: '25%', right: '10%', transform: 'translateY(-50%)' },
-        { bottom: '25%', right: '10%', transform: 'translateY(50%)' },
-        { bottom: '10%', left: '50%', transform: 'translateX(-50%)' },
-        { bottom: '25%', left: '10%', transform: 'translateY(50%)' },
-        { top: '25%', left: '10%', transform: 'translateY(-50%)' }
-      ]
-    }
-    
-    return positions[totalPlayers as keyof typeof positions]?.[index] || positions[4][index % 4]
-  }
+      2: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }],
+      3: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '10%',
+        left: '20%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '10%',
+        left: '80%',
+        transform: 'translateX(-50%)'
+      }],
+      4: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '50%',
+        right: '10%',
+        transform: 'translateY(-50%)'
+      }, {
+        bottom: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '50%',
+        left: '10%',
+        transform: 'translateY(-50%)'
+      }],
+      5: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '25%',
+        right: '15%',
+        transform: 'translateY(-50%)'
+      }, {
+        bottom: '25%',
+        right: '15%',
+        transform: 'translateY(50%)'
+      }, {
+        bottom: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '25%',
+        left: '15%',
+        transform: 'translateY(50%)'
+      }],
+      6: [{
+        top: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        top: '25%',
+        right: '10%',
+        transform: 'translateY(-50%)'
+      }, {
+        bottom: '25%',
+        right: '10%',
+        transform: 'translateY(50%)'
+      }, {
+        bottom: '10%',
+        left: '50%',
+        transform: 'translateX(-50%)'
+      }, {
+        bottom: '25%',
+        left: '10%',
+        transform: 'translateY(50%)'
+      }, {
+        top: '25%',
+        left: '10%',
+        transform: 'translateY(-50%)'
+      }]
+    };
+    return positions[totalPlayers as keyof typeof positions]?.[index] || positions[4][index % 4];
+  };
 
   // Main game screen - show console log for debugging
-  console.log('About to render, gameState:', gameState, 'game:', game)
-  
+  console.log('About to render, gameState:', gameState, 'game:', game);
+
   // Show appropriate UI based on game state
   if (gameState === 'lobby') {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-sm bg-gray-800 border-gray-700">
           <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center text-white">UNO</CardTitle>
+            <CardTitle className="text-2xl font-bold text-center text-white">ROSS UNO STACKS</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="playerName" className="text-white">Your Name</Label>
-              <Input
-                id="playerName"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Enter your name"
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Input id="playerName" value={playerName} onChange={e => setPlayerName(e.target.value)} placeholder="Enter your name" className="bg-gray-700 border-gray-600 text-white" />
             </div>
             
             <div>
               <Label htmlFor="maxPlayers" className="text-white">Number of Players</Label>
-              <Select value={maxPlayers.toString()} onValueChange={(v) => setMaxPlayers(parseInt(v))}>
+              <Select value={maxPlayers.toString()} onValueChange={v => setMaxPlayers(parseInt(v))}>
                 <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
                   <SelectValue />
                 </SelectTrigger>
@@ -1193,35 +1179,21 @@ export default function UnoGame() {
             <div className="border-t border-gray-600 pt-4">
               <Label htmlFor="joinCode" className="text-white">Join with Invite Code</Label>
               <div className="flex space-x-2 mt-2">
-                <Input
-                  id="joinCode"
-                  value={joinGameCode}
-                  onChange={(e) => setJoinGameCode(e.target.value.toUpperCase())}
-                  placeholder="Enter invite code"
-                  className="bg-gray-700 border-gray-600 text-white"
-                  maxLength={6}
-                />
-                <Button 
-                  onClick={() => {
-                    setInviteCode(joinGameCode)
-                    setGameState('joining')
-                  }} 
-                  disabled={!joinGameCode.trim() || !playerName.trim()}
-                  size="sm"
-                >
+                <Input id="joinCode" value={joinGameCode} onChange={e => setJoinGameCode(e.target.value.toUpperCase())} placeholder="Enter invite code" className="bg-gray-700 border-gray-600 text-white" maxLength={6} />
+                <Button onClick={() => {
+                setInviteCode(joinGameCode);
+                setGameState('joining');
+              }} disabled={!joinGameCode.trim() || !playerName.trim()} size="sm">
                   Join
                 </Button>
               </div>
             </div>
           </CardContent>
         </Card>
-      </div>
-    )
+      </div>;
   }
-
   if (gameState === 'joining') {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <Card className="w-full max-w-sm bg-gray-800 border-gray-700">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-center text-white">Join Game</CardTitle>
@@ -1229,13 +1201,7 @@ export default function UnoGame() {
           <CardContent className="space-y-4">
             <div>
               <Label htmlFor="playerName" className="text-white">Your Name</Label>
-              <Input
-                id="playerName"
-                value={playerName}
-                onChange={(e) => setPlayerName(e.target.value)}
-                placeholder="Enter your name"
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <Input id="playerName" value={playerName} onChange={e => setPlayerName(e.target.value)} placeholder="Enter your name" className="bg-gray-700 border-gray-600 text-white" />
             </div>
             
             <div>
@@ -1247,63 +1213,53 @@ export default function UnoGame() {
             </Button>
           </CardContent>
         </Card>
-      </div>
-    )
+      </div>;
   }
 
   // Show game end overlay instead of switching screens
   const renderGameEndOverlay = () => {
-    if (gameState !== 'ended') return null
-    
-    const winner = game?.players.find(p => p.id === game.winnerId)
-    
+    if (gameState !== 'ended') return null;
+    const winner = game?.players.find(p => p.id === game.winnerId);
     const newGame = async () => {
-      if (!game) return
-      
-      const deck = shuffleDeck(generateDeck())
-      const newHands: { [playerId: string]: UnoCard[] } = {}
-      
+      if (!game) return;
+      const deck = shuffleDeck(generateDeck());
+      const newHands: {
+        [playerId: string]: UnoCard[];
+      } = {};
+
       // Deal new hands to all players
       game.players.forEach(player => {
-        newHands[player.id] = deck.splice(0, 7)
-      })
-      
-      const discardPile = [deck.pop()!]
-      
+        newHands[player.id] = deck.splice(0, 7);
+      });
+      const discardPile = [deck.pop()!];
+
       // Update all players' hands
       for (const player of game.players) {
-        await supabase
-          .from('players')
-          .update({ hand: newHands[player.id] as any })
-          .eq('game_id', game.id)
-          .eq('player_id', player.id)
+        await supabase.from('players').update({
+          hand: newHands[player.id] as any
+        }).eq('game_id', game.id).eq('player_id', player.id);
       }
-      
+
       // Reset game state
-      await supabase
-        .from('games')
-        .update({
-          draw_pile: deck as any,
-          discard_pile: discardPile as any,
-          stacked_discard: [] as any,
-          current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
-          current_player_index: 0,
-          direction: 1,
-          pending_draw_total: 0,
-          pending_draw_type: null,
-          stacking_timer: null,
-          play_history: [] as any,
-          last_played_card: null,
-          selected_cards: [] as any,
-          winner_id: null,
-          game_state: 'playing',
-          expanded_hand_player: null
-        })
-        .eq('id', game.id)
-    }
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+      await supabase.from('games').update({
+        draw_pile: deck as any,
+        discard_pile: discardPile as any,
+        stacked_discard: [] as any,
+        current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
+        current_player_index: 0,
+        direction: 1,
+        pending_draw_total: 0,
+        pending_draw_type: null,
+        stacking_timer: null,
+        play_history: [] as any,
+        last_played_card: null,
+        selected_cards: [] as any,
+        winner_id: null,
+        game_state: 'playing',
+        expanded_hand_player: null
+      }).eq('id', game.id);
+    };
+    return <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
         {winner && <Confetti />}
         <Card className="bg-gray-800 border-gray-700 text-center p-6">
           <div className="flex items-center justify-center space-x-2 mb-4">
@@ -1322,25 +1278,23 @@ export default function UnoGame() {
             </Button>
           </div>
         </Card>
-      </div>
-    )
-  }
+      </div>;
+  };
 
   // If we get here, game must exist
-  if (!game) return null
-
-  const currentPlayer = game.players[game.currentPlayerIndex]
-  const myPlayer = game.players.find(p => p.id === playerId)
-  const topCard = game.discardPile[game.discardPile.length - 1]
-  const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color
-  const lastMove = game.playHistory[game.playHistory.length - 1]
+  if (!game) return null;
+  const currentPlayer = game.players[game.currentPlayerIndex];
+  const myPlayer = game.players.find(p => p.id === playerId);
+  const topCard = game.discardPile[game.discardPile.length - 1];
+  const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color;
+  const lastMove = game.playHistory[game.playHistory.length - 1];
 
   // Create placeholder players for empty slots
-  const allSlots = []
+  const allSlots = [];
   for (let i = 0; i < game.maxPlayers; i++) {
-    const existingPlayer = game.players.find(p => p.position === i)
+    const existingPlayer = game.players.find(p => p.position === i);
     if (existingPlayer) {
-      allSlots.push(existingPlayer)
+      allSlots.push(existingPlayer);
     } else {
       allSlots.push({
         id: `placeholder-${i}`,
@@ -1348,42 +1302,30 @@ export default function UnoGame() {
         hand: [],
         position: i,
         isHost: false
-      })
+      });
     }
   }
-
-  return (
-    <div className="min-h-screen bg-gray-900 flex flex-col overflow-hidden">
+  return <div className="min-h-screen bg-gray-900 flex flex-col overflow-hidden">
       {/* Top bar - compressed for mobile */}
       <div className="flex justify-between items-center p-1 sm:p-2 shrink-0">
         <div className="bg-gray-800 rounded-lg p-1 sm:p-2 shadow-lg">
-          {gameState === 'waiting' ? (
-            <div className="text-white">
+          {gameState === 'waiting' ? <div className="text-white">
               <div className="text-xs sm:text-sm font-bold">Waiting for players...</div>
               <div className="text-xs">{game.players.length}/{game.maxPlayers} players</div>
-            </div>
-          ) : (
-            <div className="text-left">
+            </div> : <div className="text-left">
               <div className="flex items-center space-x-1 sm:space-x-2">
                 <span className="text-xs sm:text-sm font-bold text-white">Turn: {currentPlayer?.name}</span>
                 <div className={`px-1 sm:px-2 py-1 rounded text-xs text-white ${getColorIndicatorClass(actualColor!)}`}>
                   {actualColor?.toUpperCase()}
                 </div>
                 <div className="flex items-center">
-                  {game.direction === 1 ? (
-                    <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                  ) : (
-                    <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-white" />
-                  )}
+                  {game.direction === 1 ? <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4 text-white" /> : <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4 text-white" />}
                 </div>
               </div>
-              {lastMove && (
-                <div className="text-xs text-white">
+              {lastMove && <div className="text-xs text-white">
                   {lastMove.player}: {lastMove.action}
-                </div>
-              )}
-            </div>
-          )}
+                </div>}
+            </div>}
         </div>
 
         {/* Timer and actions */}
@@ -1392,86 +1334,71 @@ export default function UnoGame() {
             History
           </Button>
           
-          {gameState === 'waiting' && myPlayer?.isHost && (
-            <Button onClick={startGame} size="sm" disabled={game.players.length < 2}>
+          {gameState === 'waiting' && myPlayer?.isHost && <Button onClick={startGame} size="sm" disabled={game.players.length < 2}>
               Start Game
-            </Button>
-          )}
+            </Button>}
           
-          {gameState === 'waiting' && (
-            <div className="text-center">
+          {gameState === 'waiting' && <div className="text-center">
               <Button onClick={copyInviteLink} className="bg-green-600 hover:bg-green-700 text-white" size="sm">
                 {copied ? <Check className="w-4 h-4 mr-1" /> : null}
                 Invite Players
               </Button>
               <div className="text-xs text-white mt-1">Game ID: {game?.inviteCode}</div>
-            </div>
-          )}
+            </div>}
         </div>
       </div>
 
       {/* Game area - relative positioning for mobile */}
-      <div className="flex-1 relative overflow-hidden" style={{ height: 'calc(100vh - 8rem)' }}>
+      <div className="flex-1 relative overflow-hidden" style={{
+      height: 'calc(100vh - 8rem)'
+    }}>
         {/* Player positions */}
         {allSlots.map((player, index) => {
-          const position = getPlayerPosition(player.position, game.maxPlayers)
-          // Adjust top position to account for increased spacing
-          const adjustedPosition = player.position === 0 ? 
-            { ...position, top: '15%' } : // Move top player down by 5 units
-            position
-          const isMyPosition = player.id === playerId
-          const isCurrentPlayer = player.position === game.currentPlayerIndex
-          const actualPlayer = game.players.find(p => p.position === player.position)
-          
-          return (
-            <div
-              key={player.id}
-              className="absolute"
-              style={adjustedPosition}
-            >
-              <div className={`bg-gray-800 rounded-lg p-1 sm:p-2 shadow-lg text-center min-w-[60px] sm:min-w-[80px] ${
-                isCurrentPlayer ? 'ring-2 ring-blue-400' : ''
-              }`}>
+        const position = getPlayerPosition(player.position, game.maxPlayers);
+        // Adjust top position to account for increased spacing
+        const adjustedPosition = player.position === 0 ? {
+          ...position,
+          top: '15%'
+        } :
+        // Move top player down by 5 units
+        position;
+        const isMyPosition = player.id === playerId;
+        const isCurrentPlayer = player.position === game.currentPlayerIndex;
+        const actualPlayer = game.players.find(p => p.position === player.position);
+        return <div key={player.id} className="absolute" style={adjustedPosition}>
+              <div className={`bg-gray-800 rounded-lg p-1 sm:p-2 shadow-lg text-center min-w-[60px] sm:min-w-[80px] ${isCurrentPlayer ? 'ring-2 ring-blue-400' : ''}`}>
                 <div className="text-white text-xs sm:text-sm font-bold">
                   {actualPlayer ? actualPlayer.name : 'Empty'}
                 </div>
-                {actualPlayer && (
-                  <div className="text-gray-400 text-xs">
+                {actualPlayer && <div className="text-gray-400 text-xs">
                     {actualPlayer.hand.length} cards
-                  </div>
-                )}
+                  </div>}
               </div>
-            </div>
-          )
-        })}
+            </div>;
+      })}
 
         {/* Center play area - more compact */}
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center space-y-2">
           {/* Draw timer and info above deck */}
-          {drawTimer && (
-            <div className="bg-red-600 text-white px-3 py-2 rounded-lg text-center font-bold">
+          {drawTimer && <div className="bg-red-600 text-white px-3 py-2 rounded-lg text-center font-bold">
               <div className="text-xl font-bold">{drawTimer}</div>
               <div className="text-sm">Draw</div>
               <div className="text-lg font-bold">+{game.pendingDrawTotal} cards</div>
-            </div>
-          )}
+            </div>}
           
           {/* Flashing green arrow when cards selected - centered above discard pile */}
-          {selectedCards.length > 0 && (
-            <div className="animate-bounce text-green-400 text-2xl absolute -top-10 left-1/2 transform -translate-x-1/2">
+          {selectedCards.length > 0 && <div className="animate-bounce text-green-400 text-2xl absolute -top-10 left-1/2 transform -translate-x-1/2">
               ⬇️
-            </div>
-          )}
+            </div>}
           
           {/* Cards area */}
           <div className="flex items-center space-x-2 sm:space-x-4">
             {/* Draw pile */}
-            <div 
-              className="relative"
-              onClick={drawCards}
-            >
+            <div className="relative" onClick={drawCards}>
               <div className="w-12 h-16 sm:w-14 sm:h-20 bg-gray-600 border-2 border-white rounded-lg flex items-center justify-center cursor-pointer hover:bg-gray-500">
-                <span className="text-white font-bold text-xs sm:text-sm" style={{ textShadow: '1px 1px 0 black' }}>
+                <span className="text-white font-bold text-xs sm:text-sm" style={{
+                textShadow: '1px 1px 0 black'
+              }}>
                   DRAW
                 </span>
               </div>
@@ -1479,147 +1406,101 @@ export default function UnoGame() {
 
             {/* Discard pile */}
             <div className="relative">
-              {game.stackedDiscard.length > 0 ? (
-                // Show stacked cards
-                <div className="relative">
-                  {game.stackedDiscard.slice(-3).map((card, index) => (
-                    <div 
-                      key={`stacked-${index}`}
-                      className="absolute"
-                      style={{ 
-                        zIndex: index,
-                        transform: `translate(${index * 2}px, ${index * -2}px)`
-                      }}
-                      onClick={selectedCards.length > 0 ? playSelectedCards : undefined}
-                    >
+              {game.stackedDiscard.length > 0 ?
+            // Show stacked cards
+            <div className="relative">
+                  {game.stackedDiscard.slice(-3).map((card, index) => <div key={`stacked-${index}`} className="absolute" style={{
+                zIndex: index,
+                transform: `translate(${index * 2}px, ${index * -2}px)`
+              }} onClick={selectedCards.length > 0 ? playSelectedCards : undefined}>
                       {renderCard(card)}
-                    </div>
-                  ))}
-                </div>
-              ) : topCard ? (
-                <div onClick={selectedCards.length > 0 ? playSelectedCards : undefined}>
+                    </div>)}
+                </div> : topCard ? <div onClick={selectedCards.length > 0 ? playSelectedCards : undefined}>
                   {renderCard(topCard)}
-                </div>
-              ) : (
-                <div className="w-12 h-16 sm:w-14 sm:h-20 bg-gray-600 border-2 border-white rounded-lg"></div>
-              )}
+                </div> : <div className="w-12 h-16 sm:w-14 sm:h-20 bg-gray-600 border-2 border-white rounded-lg"></div>}
             </div>
           </div>
         </div>
 
         {/* Player hand view - improved layout with no overlap */}
-        {myPlayer && (
-          <div className="absolute bottom-2 left-4 right-4 z-20">
-            <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mx-auto" style={{ maxWidth: 'calc(100vw - 2rem)' }}>
+        {myPlayer && <div className="absolute bottom-2 left-4 right-4 z-20">
+            <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mx-auto" style={{
+          maxWidth: 'calc(100vw - 2rem)'
+        }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-white font-bold text-sm">{myPlayer.name} ({myPlayer.hand.length} cards)</span>
                 <div className="flex items-center space-x-2">
-                  <button
-                    onClick={sortHand}
-                    className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600 text-xs"
-                  >
+                  <button onClick={sortHand} className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600 text-xs">
                     Sort
                   </button>
-                  <button
-                    onClick={() => setExpandedHand(!expandedHand)}
-                    className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600"
-                  >
+                  <button onClick={() => setExpandedHand(!expandedHand)} className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600">
                     {expandedHand ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
               
-              {expandedHand ? (
-                <div className="grid grid-cols-7 gap-2 pb-2" style={{ 
-                  maxHeight: '18rem', 
-                  overflowY: 'auto',
-                  paddingTop: '2rem' // Space for selection numbers
-                }}>
+              {expandedHand ? <div className="grid grid-cols-7 gap-2 pb-2" style={{
+            maxHeight: '18rem',
+            overflowY: 'auto',
+            paddingTop: '2rem' // Space for selection numbers
+          }}>
                   {myPlayer.hand.map((card, index) => {
-                    const isSelected = selectedCards.some(c => c.id === card.id)
-                    
-                    return (
-                      <div
-                        key={card.id}
-                        className="cursor-pointer relative z-10"
-                        onClick={() => selectCard(card, index)}
-                        style={{ minHeight: '6rem' }}
-                      >
+              const isSelected = selectedCards.some(c => c.id === card.id);
+              return <div key={card.id} className="cursor-pointer relative z-10" onClick={() => selectCard(card, index)} style={{
+                minHeight: '6rem'
+              }}>
                         {renderCard(card, index, undefined, false, isSelected)}
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className="flex space-x-1 overflow-x-auto pb-2" style={{ 
-                  maxWidth: '100%',
-                  paddingTop: '1rem' // Space for selection numbers
-                }}>
+                      </div>;
+            })}
+                </div> : <div className="flex space-x-1 overflow-x-auto pb-2" style={{
+            maxWidth: '100%',
+            paddingTop: '1rem' // Space for selection numbers
+          }}>
                   {myPlayer.hand.map((card, index) => {
-                    const isSelected = selectedCards.some(c => c.id === card.id)
-                    
-                    return (
-                      <div
-                        key={card.id}
-                        className="cursor-pointer flex-shrink-0 relative z-10"
-                        onClick={() => selectCard(card, index)}
-                        style={{ minHeight: '6rem' }}
-                      >
+              const isSelected = selectedCards.some(c => c.id === card.id);
+              return <div key={card.id} className="cursor-pointer flex-shrink-0 relative z-10" onClick={() => selectCard(card, index)} style={{
+                minHeight: '6rem'
+              }}>
                         {renderCard(card, index, undefined, false, isSelected)}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
+                      </div>;
+            })}
+                </div>}
             </div>
-          </div>
-        )}
+          </div>}
         
         {/* Show expanded hand for other players */}
-        {game.expandedHandPlayer && game.expandedHandPlayer !== playerId && (
-          <div className="absolute inset-4 bg-gray-800 border border-gray-600 rounded-lg p-4 z-30">
+        {game.expandedHandPlayer && game.expandedHandPlayer !== playerId && <div className="absolute inset-4 bg-gray-800 border border-gray-600 rounded-lg p-4 z-30">
             <div className="flex items-center justify-between mb-4">
               <span className="text-white font-bold">
                 {game.players.find(p => p.id === game.expandedHandPlayer)?.name}'s Hand
               </span>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    supabase
-                      .from('games')
-                      .update({ expanded_hand_player: null })
-                      .eq('id', game.id)
-                  }}
-                  className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600"
-                >
+                <button onClick={() => {
+              supabase.from('games').update({
+                expanded_hand_player: null
+              }).eq('id', game.id);
+            }} className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600">
                   <ZoomOut className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-7 gap-2 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-              {game.players.find(p => p.id === game.expandedHandPlayer)?.hand.map((card, index) => (
-                <div key={card.id} className="relative">
+            <div className="grid grid-cols-7 gap-2 overflow-y-auto" style={{
+          maxHeight: '60vh'
+        }}>
+              {game.players.find(p => p.id === game.expandedHandPlayer)?.hand.map((card, index) => <div key={card.id} className="relative">
                   {renderCard(card, index, undefined, false, false)}
-                </div>
-              ))}
+                </div>)}
             </div>
-          </div>
-        )}
+          </div>}
       </div>
 
       {renderGameEndOverlay()}
 
       {/* Modals */}
-      {showColorSelect && (
-        <ColorSelectModal
-          onColorSelect={handleColorSelect}
-          onClose={() => setShowColorSelect(false)}
-        />
-      )}
+      {showColorSelect && <ColorSelectModal onColorSelect={handleColorSelect} onClose={() => setShowColorSelect(false)} />}
 
       {/* Game History Modal */}
-      {showHistory && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      {showHistory && <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-800 rounded-lg p-4 max-w-md w-full max-h-96 overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold text-white">Game History</h3>
@@ -1628,18 +1509,12 @@ export default function UnoGame() {
               </Button>
             </div>
             <div className="space-y-2">
-              {game.playHistory.map((move, index) => (
-                <div key={index} className="text-sm text-gray-300 bg-gray-700 p-2 rounded">
+              {game.playHistory.map((move, index) => <div key={index} className="text-sm text-gray-300 bg-gray-700 p-2 rounded">
                   <strong>{move.player}:</strong> {move.action}
-                </div>
-              ))}
-              {game.playHistory.length === 0 && (
-                <div className="text-gray-400 text-center">No moves yet</div>
-              )}
+                </div>)}
+              {game.playHistory.length === 0 && <div className="text-gray-400 text-center">No moves yet</div>}
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
+        </div>}
+    </div>;
 }
