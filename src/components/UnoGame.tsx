@@ -523,6 +523,8 @@ export default function UnoGame() {
       let newPendingDrawTotal = game.pendingDrawTotal;
       let newPendingDrawType = game.pendingDrawType;
       let newStackingTimer = game.stackingTimer;
+      let actualNextPlayerIndex = nextPlayerIndex;
+      
       if (cards.some(c => c.type === 'draw2' || c.type === 'wild4')) {
         const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4');
         const drawAmount = drawCards.reduce((sum, card) => {
@@ -531,10 +533,13 @@ export default function UnoGame() {
         newPendingDrawTotal += drawAmount;
         newPendingDrawType = drawCards[0].type === 'draw2' ? 'draw2' : 'wild4';
 
-        // Set 5-second timer for next player
+        // Set 5-second timer for next player to respond
         newStackingTimer = new Date(Date.now() + 5000).toISOString();
+        
+        // Move turn to next player immediately after playing draw cards
+        actualNextPlayerIndex = nextPlayerIndex;
       } else if (game.pendingDrawTotal > 0) {
-        // Clear pending draw if non-draw cards played
+        // Clear pending draw if non-draw cards played during draw response
         newPendingDrawTotal = 0;
         newPendingDrawType = null;
         newStackingTimer = null;
@@ -582,7 +587,7 @@ export default function UnoGame() {
         discard_pile: newDiscardPile as any,
         stacked_discard: newStackedDiscard as any,
         current_color: newColor,
-        current_player_index: nextPlayerIndex,
+        current_player_index: actualNextPlayerIndex,
         direction: newDirection,
         play_history: newPlayHistory as any,
         last_played_card: cards[cards.length - 1] as any,
@@ -697,13 +702,12 @@ export default function UnoGame() {
   const handleDrawTimeout = async () => {
     if (!game) return;
     try {
-      // The next player (not current) must draw the pending cards
-      const targetPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
-      const targetPlayer = game.players[targetPlayerIndex];
+      // The current player (who failed to respond) must draw the pending cards
+      const currentPlayer = game.players[game.currentPlayerIndex];
 
-      // Only the target player should execute this
-      if (targetPlayer?.id !== playerId) return;
-      const newHand = [...targetPlayer.hand];
+      // Only the current player should execute this
+      if (currentPlayer?.id !== playerId) return;
+      const newHand = [...currentPlayer.hand];
       const newDrawPile = [...game.drawPile];
       for (let i = 0; i < game.pendingDrawTotal; i++) {
         if (newDrawPile.length > 0) {
@@ -711,13 +715,13 @@ export default function UnoGame() {
         }
       }
 
-      // Update target player's hand
+      // Update current player's hand
       await supabase.from('players').update({
         hand: newHand as any
-      }).eq('game_id', game.id).eq('player_id', targetPlayer.id);
+      }).eq('game_id', game.id).eq('player_id', currentPlayer.id);
 
-      // Move to next player after target and clear pending draw
-      const nextPlayerIndex = (targetPlayerIndex + game.direction + game.players.length) % game.players.length;
+      // Move to next player after current player draws and gets their turn skipped
+      const nextPlayerIndex = (game.currentPlayerIndex + game.direction + game.players.length) % game.players.length;
       await supabase.from('games').update({
         current_player_index: nextPlayerIndex,
         pending_draw_total: 0,
@@ -725,12 +729,12 @@ export default function UnoGame() {
         stacking_timer: null,
         draw_pile: newDrawPile as any,
         play_history: [...game.playHistory, {
-          player: targetPlayer.name,
+          player: currentPlayer.name,
           action: `drew +${game.pendingDrawTotal} cards (timer expired)`
         }] as any
       }).eq('id', game.id);
       toast({
-        title: `${targetPlayer.name} drew +${game.pendingDrawTotal} cards`,
+        title: `${currentPlayer.name} drew +${game.pendingDrawTotal} cards`,
         description: "Time ran out for draw card response",
         variant: "destructive"
       });
