@@ -1168,7 +1168,7 @@ export default function UnoGame() {
               </Select>
             </div>
 
-            <Button onClick={createGame} className="w-full" disabled={!playerName.trim()}>
+            <Button onClick={createGame} disabled={!playerName.trim()} className="w-full bg-[#09fd09] rounded-md text-slate-50 text-base">
               Create Game
             </Button>
             
