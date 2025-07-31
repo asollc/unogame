@@ -590,6 +590,22 @@ export default function UnoGame() {
         action: actionText
       }];
 
+      // Update local game state immediately for draw cards to fix timer display
+      if (drawCards.length > 0) {
+        setGame(prevGame => {
+          if (!prevGame) return prevGame;
+          return {
+            ...prevGame,
+            currentPlayerIndex: actualNextPlayerIndex,
+            pendingDrawTotal: newPendingDrawTotal,
+            pendingDrawType: newPendingDrawType,
+            stackingTimer: newStackingTimer,
+            currentColor: newColor,
+            direction: newDirection as 1 | -1
+          };
+        });
+      }
+
       // Update game state
       await supabase.from('games').update({
         discard_pile: newDiscardPile as any,
