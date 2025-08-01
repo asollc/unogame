@@ -378,15 +378,17 @@ export default function UnoGame() {
     const currentPlayer = game.players[game.currentPlayerIndex];
     const isMyTurn = currentPlayer?.id === myPlayer.id;
     
-    console.log('Turn validation:', {
+    console.log('🔍 selectCard validation:', {
       currentPlayerIndex: game.currentPlayerIndex,
       currentPlayerId: currentPlayer?.id,
       myPlayerId: myPlayer.id,
       isMyTurn,
-      gameState
+      cardToPlay: `${card.color} ${card.value || card.type}`,
+      canPlay: canPlayCard(card)
     });
     
     if (!isMyTurn) {
+      console.log('❌ Not player turn - blocking card selection');
       toast({
         title: "Not your turn",
         description: "Wait for your turn to play",
@@ -395,15 +397,18 @@ export default function UnoGame() {
       return;
     }
 
-    // Validate card can be played FIRST
+    // CRITICAL: Validate card can be played BEFORE allowing selection
     if (!canPlayCard(card)) {
+      console.log('❌ Invalid card play attempt - blocking selection');
       toast({
         title: "Invalid card",
-        description: "This card cannot be played now",
+        description: "This card cannot be played on the current card",
         variant: "destructive"
       });
       return;
     }
+    
+    console.log('✅ Card selection allowed - proceeding');
 
     // Check draw response mode
     const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
@@ -475,37 +480,51 @@ export default function UnoGame() {
   const canPlayCard = (card: UnoCard): boolean => {
     if (!topCard || !game) return false;
 
+    console.log('🔍 canPlayCard validation:', {
+      card: `${card.color} ${card.value || card.type}`,
+      topCard: `${topCard.color} ${topCard.value || topCard.type}`,
+      currentColor: game.currentColor,
+      pendingDrawTotal: game.pendingDrawTotal,
+      selectedCardsCount: selectedCards.length
+    });
+
     // In draw response mode, only matching draw cards allowed
     if (game.pendingDrawTotal > 0 && game.pendingDrawType) {
-      return canPlayDrawCard(card);
+      const canPlayDraw = canPlayDrawCard(card);
+      console.log(canPlayDraw ? '✅' : '❌', 'Draw response mode - can play:', canPlayDraw);
+      return canPlayDraw;
     }
 
     // Wild cards can always be played (except during draw response)
-    if (card.color === 'wild') return true;
+    if (card.color === 'wild') {
+      console.log('✅ Wild card - always playable');
+      return true;
+    }
 
     const currentColor = game.currentColor;
 
     // For first card in a stack, must match current game state
     if (selectedCards.length === 0) {
       // Match current color
-      if (card.color === currentColor) return true;
+      if (card.color === currentColor) {
+        console.log('✅ Color match:', card.color, '===', currentColor);
+        return true;
+      }
 
       // Match number value
-      if (card.type === 'number' && topCard.type === 'number' && card.value === topCard.value) return true;
+      if (card.type === 'number' && topCard.type === 'number' && card.value === topCard.value) {
+        console.log('✅ Number match:', card.value, '===', topCard.value);
+        return true;
+      }
 
       // Match special card type (skip, reverse, draw2) but not wild types
-      if (card.type === topCard.type && card.type !== 'wild' && card.type !== 'wild4') return true;
+      if (card.type === topCard.type && card.type !== 'wild' && card.type !== 'wild4') {
+        console.log('✅ Type match:', card.type, '===', topCard.type);
+        return true;
+      }
     }
 
-    console.log('Card validation failed:', {
-      topCard: `${topCard.color} ${topCard.value}`,
-      currentColor,
-      playedCard: `${card.color} ${card.value}`,
-      colorMatch: card.color === currentColor,
-      valueMatch: card.type === 'number' && topCard.type === 'number' && card.value === topCard.value,
-      typeMatch: card.type === topCard.type && card.type !== 'wild' && card.type !== 'wild4'
-    });
-    
+    console.log('❌ Card validation failed - no valid matches');
     return false;
   };
   const canPlayDrawCard = (card: UnoCard): boolean => {
@@ -531,6 +550,16 @@ export default function UnoGame() {
   const executeCardPlay = async (cards: UnoCard[], chosenColor: CardColor | null) => {
     if (!game || !myPlayer) return;
     try {
+      // Calculate turn effects BEFORE making any changes
+      const effects = calculateCardEffects(cards);
+      
+      console.log('🎯 executeCardPlay - starting:', {
+        currentPlayerIndex: game.currentPlayerIndex,
+        calculatedNextPlayerIndex: effects.nextPlayerIndex,
+        direction: effects.newDirection,
+        playedCards: cards.map(c => `${c.color} ${c.value || c.type}`)
+      });
+      
       // Remove cards from player's hand
       const newHand = [...myPlayer.hand];
       cards.forEach(card => {
@@ -545,19 +574,10 @@ export default function UnoGame() {
         hand: newHand as any
       }).eq('game_id', game.id).eq('player_id', playerId);
 
-      // Calculate effects based on card types
-      const {
-        nextPlayerIndex,
-        newDirection,
-        drawEffects,
-        skipEffects
-      } = calculateCardEffects(cards);
-
       // Handle draw card stacking
       let newPendingDrawTotal = game.pendingDrawTotal;
       let newPendingDrawType = game.pendingDrawType;
       let newStackingTimer = game.stackingTimer;
-      let actualNextPlayerIndex = nextPlayerIndex;
       
       if (cards.some(c => c.type === 'draw2' || c.type === 'wild4')) {
         const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4');
@@ -569,18 +589,13 @@ export default function UnoGame() {
 
         // Set 5-second timer for next player to respond
         newStackingTimer = new Date(Date.now() + 5000).toISOString();
-        
-        // Move turn to next player immediately after playing draw cards
-        actualNextPlayerIndex = nextPlayerIndex;
       } else {
-        // For all other cards, clear any pending draw state and advance turn normally
+        // For all other cards, clear any pending draw state
         if (game.pendingDrawTotal > 0) {
           newPendingDrawTotal = 0;
           newPendingDrawType = null;
           newStackingTimer = null;
         }
-        // Always advance turn for normal card plays
-        actualNextPlayerIndex = nextPlayerIndex;
       }
 
       // Determine new color
@@ -621,28 +636,29 @@ export default function UnoGame() {
       }];
 
       // Update local game state immediately for draw cards to fix timer display
+      const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4');
       if (drawCards.length > 0) {
         setGame(prevGame => {
           if (!prevGame) return prevGame;
           return {
             ...prevGame,
-            currentPlayerIndex: actualNextPlayerIndex,
+            currentPlayerIndex: effects.nextPlayerIndex,
             pendingDrawTotal: newPendingDrawTotal,
             pendingDrawType: newPendingDrawType,
             stackingTimer: newStackingTimer,
             currentColor: newColor,
-            direction: newDirection as 1 | -1
+            direction: effects.newDirection as 1 | -1
           };
         });
       }
 
-      // Update game state
-      await supabase.from('games').update({
+      // CRITICAL: Always update to calculated next player index
+      const gameUpdate = {
         discard_pile: newDiscardPile as any,
         stacked_discard: newStackedDiscard as any,
         current_color: newColor,
-        current_player_index: actualNextPlayerIndex,
-        direction: newDirection,
+        current_player_index: effects.nextPlayerIndex, // Use calculated next player
+        direction: effects.newDirection,
         play_history: newPlayHistory as any,
         last_played_card: cards[cards.length - 1] as any,
         pending_draw_total: newPendingDrawTotal,
@@ -651,7 +667,25 @@ export default function UnoGame() {
         selected_cards: [] as any,
         winner_id: newHand.length === 0 ? playerId : null,
         game_state: newHand.length === 0 ? 'ended' : 'playing'
-      }).eq('id', game.id);
+      };
+
+      console.log('🚀 Database update:', {
+        oldCurrentPlayerIndex: game.currentPlayerIndex,
+        newCurrentPlayerIndex: effects.nextPlayerIndex,
+        direction: effects.newDirection,
+        newCurrentColor: newColor
+      });
+
+      await supabase.from('games').update(gameUpdate).eq('id', game.id);
+
+      // Update local state immediately to prevent UI lag
+      setGame(prev => prev ? { 
+        ...prev, 
+        ...gameUpdate,
+        direction: effects.newDirection as 1 | -1
+      } : null);
+
+      console.log('✅ Card play completed successfully');
 
       // Clear selections
       setSelectedCards([]);
@@ -1362,6 +1396,14 @@ export default function UnoGame() {
         <Card className="w-full max-w-sm bg-gray-800 border-gray-700">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-center text-white">ROSS UNO STACKS</CardTitle>
+            <div className="text-sm text-gray-400 text-center mt-1">
+              Build: {new Date().toLocaleTimeString('en-US', { 
+                timeZone: 'America/New_York', 
+                hour12: false, 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              }).replace(':', '')}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
