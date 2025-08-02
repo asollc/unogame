@@ -475,11 +475,14 @@ export default function UnoGame() {
     return false;
   };
   const canPlayCard = (card: UnoCard): boolean => {
-    if (!topCard || !game) return false;
+    if (!topCard || !game) {
+      console.log('❌ canPlayCard: Missing topCard or game', { topCard: !!topCard, game: !!game });
+      return false;
+    }
 
     console.log('🔍 canPlayCard validation:', {
       card: `${card.color} ${card.value || card.type}`,
-      topCard: `${topCard.color} ${topCard.value || topCard.type}`,
+      topCard: `${topCard.color} ${topCard.value || topCard.type}`, 
       currentColor: game.currentColor,
       pendingDrawTotal: game.pendingDrawTotal,
       selectedCardsCount: selectedCards.length
@@ -521,7 +524,12 @@ export default function UnoGame() {
       }
     }
 
-    console.log('❌ Card validation failed - no valid matches');
+    console.log('❌ Card validation failed - no valid matches found');
+    console.log('    Checked:', {
+      colorMatch: `${card.color} === ${currentColor}`,
+      numberMatch: `${card.type === 'number' ? card.value : 'N/A'} === ${topCard.type === 'number' ? topCard.value : 'N/A'}`,
+      typeMatch: `${card.type} === ${topCard.type} (both non-wild)`
+    });
     return false;
   };
   const canPlayDrawCard = (card: UnoCard): boolean => {
@@ -1541,10 +1549,14 @@ export default function UnoGame() {
 
   // If we get here, game must exist
   if (!game) return null;
-  const currentPlayer = game.players[game.currentPlayerIndex];
-  const myPlayer = game.players.find(p => p.id === playerId);
+  
+  // CRITICAL: Calculate topCard early so validation functions can use it
   const topCard = game.discardPile[game.discardPile.length - 1];
   const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color;
+  
+  // Player references
+  const currentPlayer = game.players[game.currentPlayerIndex];
+  const myPlayer = game.players.find(p => p.id === playerId);
   const lastMove = game.playHistory[game.playHistory.length - 1];
 
   // Create placeholder players for empty slots
