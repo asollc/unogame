@@ -397,23 +397,19 @@ export default function UnoGame() {
       return;
     }
 
-    // CRITICAL: Validate card can be played BEFORE allowing selection
-    if (!canPlayCard(card)) {
-      console.log('❌ Invalid card play attempt - blocking selection');
-      toast({
-        title: "Invalid card",
-        description: "This card cannot be played on the current card",
-        variant: "destructive"
-      });
+    // Handle deselection first - check if card is already selected
+    const isAlreadySelected = selectedCards.some(c => c.id === card.id);
+    if (isAlreadySelected) {
+      console.log('🔄 Deselecting card:', `${card.color} ${card.value || card.type}`);
+      setSelectedCards(prev => prev.filter(c => c.id !== card.id));
       return;
     }
-    
-    console.log('✅ Card selection allowed - proceeding');
 
-    // Check draw response mode
+    // Check draw response mode first
     const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
     if (inDrawResponseMode) {
       if (!canPlayDrawCard(card)) {
+        console.log('❌ Invalid draw response card');
         toast({
           title: "Must play matching draw card",
           description: `You must play a ${game.pendingDrawType} card or draw +${game.pendingDrawTotal} cards`,
@@ -422,46 +418,47 @@ export default function UnoGame() {
         return;
       }
     }
-    const isAlreadySelected = selectedCards.some(c => c.id === card.id);
-    if (isAlreadySelected) {
-      // Deselect card
-      setSelectedCards(prev => prev.filter(c => c.id !== card.id));
-    } else {
-      // Select card - validate for stacking
-      if (selectedCards.length === 0) {
-        // First card - check if it can be played
-        if (canPlayCard(card)) {
-          setSelectedCards([card]);
-        } else {
-          // Provide specific error message based on game state
-          let errorMessage = "";
-          if (topCard?.type === 'number') {
-            errorMessage = `Must match color (${game.currentColor}) or number (${topCard.value})`;
-          } else if (topCard?.type && topCard.type !== 'wild' && topCard.type !== 'wild4') {
-            errorMessage = `Must match card type (${topCard.type}) or color (${game.currentColor})`;
-          } else {
-            errorMessage = `Must match color (${game.currentColor})`;
-          }
-          
-          toast({
-            title: "Invalid card",
-            description: errorMessage,
-            variant: "destructive"
-          });
-        }
+
+    // CRITICAL: Single validation point - validate card can be played
+    if (!canPlayCard(card)) {
+      console.log('❌ Invalid card play attempt - blocking selection');
+      
+      // Provide specific error message based on game state
+      let errorMessage = "";
+      if (topCard?.type === 'number') {
+        errorMessage = `Must match color (${game.currentColor}) or number (${topCard.value})`;
+      } else if (topCard?.type && topCard.type !== 'wild' && topCard.type !== 'wild4') {
+        errorMessage = `Must match card type (${topCard.type}) or color (${game.currentColor})`;
       } else {
-        // Additional card - must match value for stacking
-        const firstCard = selectedCards[0];
-        if (canStackCard(firstCard, card)) {
-          setSelectedCards(prev => [...prev, card]);
-        } else {
-          const stackType = firstCard.type === 'number' ? `number ${firstCard.value}` : firstCard.type;
-          toast({
-            title: "Cannot stack",
-            description: `Can only stack cards with same ${stackType}`,
-            variant: "destructive"
-          });
-        }
+        errorMessage = `Must match color (${game.currentColor})`;
+      }
+      
+      toast({
+        title: "Invalid card",
+        description: errorMessage,
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    console.log('✅ Card selection allowed - proceeding');
+
+    // Handle card selection - either first card or stacking
+    if (selectedCards.length === 0) {
+      // First card selection - already validated above
+      setSelectedCards([card]);
+    } else {
+      // Additional card - validate for stacking
+      const firstCard = selectedCards[0];
+      if (canStackCard(firstCard, card)) {
+        setSelectedCards(prev => [...prev, card]);
+      } else {
+        const stackType = firstCard.type === 'number' ? `number ${firstCard.value}` : firstCard.type;
+        toast({
+          title: "Cannot stack",
+          description: `Can only stack cards with same ${stackType}`,
+          variant: "destructive"
+        });
       }
     }
   };
