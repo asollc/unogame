@@ -277,6 +277,32 @@ export default function UnoGame() {
       filter: `id=eq.${game.id}`
     }, payload => {
       console.log('Game change detected:', payload);
+      
+      // Check for player join notifications in the play history
+      if (payload.new && (payload.new as any).play_history && payload.old && (payload.old as any).play_history) {
+        const newHistory = (payload.new as any).play_history;
+        const oldHistory = (payload.old as any).play_history;
+        
+        // Find new entries in the history
+        if (Array.isArray(newHistory) && Array.isArray(oldHistory) && newHistory.length > oldHistory.length) {
+          const newEntries = newHistory.slice(oldHistory.length);
+          newEntries.forEach((entry: any) => {
+            if (entry.action === 'joined the game') {
+              // Show notification for all players except the one who joined
+              const myPlayer = game?.players.find(p => p.id === playerId);
+              if (myPlayer && entry.player !== myPlayer.name) {
+                toast({
+                  title: "Player joined!",
+                  description: myPlayer.isHost ? 
+                    `${entry.player} joined the game` : 
+                    `${entry.player} joined the game. Please wait while the host sets up the match.`
+                });
+              }
+            }
+          });
+        }
+      }
+      
       loadGame(game.id);
     }).on('postgres_changes', {
       event: '*',
@@ -475,8 +501,8 @@ export default function UnoGame() {
       return firstCard.value === newCard.value;
     }
 
-    // For special cards (draw2, skip, reverse), stack same type regardless of color
-    if (firstCard.type === newCard.type && firstCard.type !== 'number' && firstCard.type !== 'wild' && firstCard.type !== 'wild4') {
+    // For special cards (draw2, skip, reverse, wild, wild4), stack same type regardless of color
+    if (firstCard.type === newCard.type && firstCard.type !== 'number') {
       return true;
     }
     return false;
@@ -1000,7 +1026,7 @@ export default function UnoGame() {
       } = await supabase.from('games').insert({
         host_id: playerId,
         invite_code: gameCode,
-        max_players: maxPlayers,
+        max_players: 8,
         current_player_index: 0,
         direction: 1,
         draw_pile: deck as any,
@@ -1077,9 +1103,9 @@ export default function UnoGame() {
       await loadGame(gameData.id);
       setGameState('playing'); // Join directly into game
 
-      // Show join notification
+      // Show join notification on all screens
       toast({
-        title: "Welcome to the game!",
+        title: "Player joined!",
         description: `${playerName} joined the game`
       });
 
@@ -1441,24 +1467,11 @@ export default function UnoGame() {
               <Input id="playerName" value={playerName} onChange={e => setPlayerName(e.target.value)} placeholder="Enter your name" className="bg-gray-700 border-gray-600 text-white" />
             </div>
             
-            <div>
-              <Label htmlFor="maxPlayers" className="text-white">Number of Players</Label>
-              <Select value={maxPlayers.toString()} onValueChange={v => setMaxPlayers(parseInt(v))}>
-                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-700 border-gray-600">
-                  <SelectItem value="2" className="text-white">2 Players</SelectItem>
-                  <SelectItem value="3" className="text-white">3 Players</SelectItem>
-                  <SelectItem value="4" className="text-white">4 Players</SelectItem>
-                  <SelectItem value="5" className="text-white">5 Players</SelectItem>
-                  <SelectItem value="6" className="text-white">6 Players</SelectItem>
-                  <SelectItem value="7" className="text-white">7 Players</SelectItem>
-                  <SelectItem value="8" className="text-white">8 Players</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
 
+            <div className="text-sm text-gray-400 text-center mb-4">
+              Up to 8 players can join your game
+            </div>
+            
             <Button onClick={createGame} disabled={!playerName.trim()} className="w-full bg-[#09fd09] rounded-md text-slate-50 text-base">
               Create Game
             </Button>
@@ -1640,6 +1653,7 @@ export default function UnoGame() {
                 Invite Players
               </Button>
               <div className="text-xs text-white mt-1">Game ID: {game?.inviteCode}</div>
+              {!myPlayer?.isHost && <div className="text-xs text-gray-400 mt-1">Please wait while the host sets up the match</div>}
             </div>}
 
           {gameState === 'seating' && myPlayer?.isHost && <Button onClick={beginGame} size="sm" disabled={game.players.filter(p => p.seated).length < 2}>
