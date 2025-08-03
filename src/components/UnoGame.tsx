@@ -216,6 +216,13 @@ export default function UnoGame() {
     toast
   } = useToast();
 
+  // CRITICAL: Use useMemo for topCard so validation functions always have current value
+  // Must be declared with all other hooks at the top of the component
+  const topCard = React.useMemo(() => {
+    if (!game?.discardPile?.length) return null;
+    return game.discardPile[game.discardPile.length - 1];
+  }, [game?.discardPile]);
+
   // Prevent page refresh via scroll
   useEffect(() => {
     let refreshWarned = false;
@@ -1532,11 +1539,6 @@ export default function UnoGame() {
 
   // If we get here, game must exist
   if (!game) return null;
-  
-  // CRITICAL: Use useMemo for topCard so validation functions always have current value
-  const topCard = React.useMemo(() => {
-    return game.discardPile[game.discardPile.length - 1];
-  }, [game.discardPile]);
   
   const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color;
   
