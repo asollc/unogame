@@ -510,8 +510,10 @@ export default function UnoGame() {
 
     const currentColor = game.currentColor;
 
-    // For first card in a stack, must match current game state
+    // FIXED STACKING LOGIC: Only validate FIRST card against game state
+    // Additional cards in stack only need to match the first card
     if (selectedCards.length === 0) {
+      // First card - must match current game state
       // Match current color
       if (card.color === currentColor) {
         console.log('✅ Color match:', card.color, '===', currentColor);
@@ -529,15 +531,15 @@ export default function UnoGame() {
         console.log('✅ Type match:', card.type, '===', topCard.type);
         return true;
       }
+      
+      console.log('❌ First card validation failed - no valid matches found');
+      return false;
+    } else {
+      // Subsequent cards - only need to match the first selected card
+      // This is handled in selectCard() via canStackCard()
+      console.log('✅ Subsequent card - validation handled by canStackCard()');
+      return true;
     }
-
-    console.log('❌ Card validation failed - no valid matches found');
-    console.log('    Checked:', {
-      colorMatch: `${card.color} === ${currentColor}`,
-      numberMatch: `${card.type === 'number' ? card.value : 'N/A'} === ${topCard.type === 'number' ? topCard.value : 'N/A'}`,
-      typeMatch: `${card.type} === ${topCard.type} (both non-wild)`
-    });
-    return false;
   };
   const canPlayDrawCard = (card: UnoCard): boolean => {
     if (!game.pendingDrawType) return false;
@@ -642,10 +644,23 @@ export default function UnoGame() {
           actionText = `${cards.length} ${card.type}s`;
         }
       }
-      const newPlayHistory = [...game.playHistory, {
+      // Create play history entries including skip notifications
+      const playHistoryEntries = [{
         player: myPlayer.name,
         action: actionText
       }];
+      
+      // Add skip notifications to history
+      if (effects.skippedPlayers && effects.skippedPlayers.length > 0) {
+        effects.skippedPlayers.forEach(playerName => {
+          playHistoryEntries.push({
+            player: playerName,
+            action: "was skipped"
+          });
+        });
+      }
+      
+      const newPlayHistory = [...game.playHistory, ...playHistoryEntries];
 
       // Update local game state immediately for draw cards to fix timer display
       const drawCards = cards.filter(c => c.type === 'draw2' || c.type === 'wild4');
@@ -739,7 +754,8 @@ export default function UnoGame() {
       nextPlayerIndex: 0,
       newDirection: 1,
       drawEffects: 0,
-      skipEffects: 0
+      skipEffects: 0,
+      skippedPlayers: []
     };
     
     const seatedPlayers = getSeatedPlayers();
@@ -747,13 +763,15 @@ export default function UnoGame() {
       nextPlayerIndex: game.currentPlayerIndex,
       newDirection: game.direction,
       drawEffects: 0,
-      skipEffects: 0
+      skipEffects: 0,
+      skippedPlayers: []
     };
 
     const currentSeatedIndex = getCurrentSeatedPlayerIndex();
     let nextSeatedIndex = currentSeatedIndex;
     let newDirection = game.direction;
     let skipCount = 0;
+    const skippedPlayers: string[] = [];
     
     cards.forEach(card => {
       switch (card.type) {
@@ -774,23 +792,22 @@ export default function UnoGame() {
       }
     });
 
-    // Handle skip stacking - DEFINITIVE RULE: Current player's turn ALWAYS ends
-    if (skipCount > 0) {
-      // Skip the target player(s), but current player's turn still ends
-      for (let i = 0; i < skipCount; i++) {
-        nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
+    // FIXED: Proper skip logic with player tracking
+    // Always advance turn first (current player's turn always ends)
+    nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
+    
+    // Then skip additional players based on skip count
+    for (let i = 0; i < skipCount; i++) {
+      const skippedPlayer = seatedPlayers[nextSeatedIndex];
+      if (skippedPlayer) {
+        skippedPlayers.push(skippedPlayer.name);
       }
+      nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
 
     // Handle even number of reverses in non-2-player games  
     if (cards.filter(c => c.type === 'reverse').length % 2 === 0 && seatedPlayers.length > 2) {
       newDirection = game.direction; // Direction stays the same
-      // DEFINITIVE RULE: Current player's turn ALWAYS ends, even with even reverses
-    }
-
-    // Normal turn progression - DEFINITIVE RULE: always advance turn
-    if (skipCount === 0) {
-      nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
     
     // Convert seated index back to player array index
@@ -801,7 +818,8 @@ export default function UnoGame() {
       nextPlayerIndex: nextPlayerIndex !== -1 ? nextPlayerIndex : game.currentPlayerIndex,
       newDirection,
       drawEffects: 0,
-      skipEffects: skipCount
+      skipEffects: skipCount,
+      skippedPlayers
     };
 
     console.log('Turn advancement calculated:', {
@@ -811,6 +829,7 @@ export default function UnoGame() {
       nextPlayerIndex: result.nextPlayerIndex,
       direction: newDirection,
       skipCount,
+      skippedPlayers,
       seatedPlayersCount: seatedPlayers.length,
       reversesPlayed: cards.filter(c => c.type === 'reverse').length
     });
@@ -1045,8 +1064,24 @@ export default function UnoGame() {
         position: existingPlayers?.length || 0,
         is_host: false
       });
+
+      // Add player join notification to game history
+      const currentHistory = Array.isArray(gameData.play_history) ? gameData.play_history : [];
+      await supabase.from('games').update({
+        play_history: [...currentHistory, {
+          player: playerName,
+          action: "joined the game"
+        }] as any
+      }).eq('id', gameData.id);
+
       await loadGame(gameData.id);
       setGameState('playing'); // Join directly into game
+
+      // Show join notification
+      toast({
+        title: "Welcome to the game!",
+        description: `${playerName} joined the game`
+      });
 
       // Scroll to top for new players
       window.scrollTo(0, 0);
