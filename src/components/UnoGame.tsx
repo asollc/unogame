@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -767,38 +767,21 @@ export default function UnoGame() {
       }
     });
 
-    // Handle skip stacking - current player doesn't get skipped
+    // Handle skip stacking - DEFINITIVE RULE: Current player's turn ALWAYS ends
     if (skipCount > 0) {
-      // Skip the next player(s), but keep current player's turn if stacking
-      if (seatedPlayers.length === 2 && cards.some(c => c.type === 'skip' || c.type === 'reverse' && seatedPlayers.length === 2)) {
-        // In 2-player games with skip stacking, current player gets additional turns
-        return {
-          nextPlayerIndex: game.currentPlayerIndex, // Keep current player
-          newDirection,
-          drawEffects: 0,
-          skipEffects: skipCount
-        };
-      } else {
-        // Multi-player skip stacking
-        for (let i = 0; i < skipCount; i++) {
-          nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
-        }
+      // Skip the target player(s), but current player's turn still ends
+      for (let i = 0; i < skipCount; i++) {
+        nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
       }
     }
 
     // Handle even number of reverses in non-2-player games  
     if (cards.filter(c => c.type === 'reverse').length % 2 === 0 && seatedPlayers.length > 2) {
       newDirection = game.direction; // Direction stays the same
-      // Player gets another turn
-      return {
-        nextPlayerIndex: game.currentPlayerIndex,
-        newDirection,
-        drawEffects: 0,
-        skipEffects: skipCount
-      };
+      // DEFINITIVE RULE: Current player's turn ALWAYS ends, even with even reverses
     }
 
-    // Normal turn progression - always advance turn unless special stacking rules apply
+    // Normal turn progression - DEFINITIVE RULE: always advance turn
     if (skipCount === 0) {
       nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
@@ -1550,8 +1533,11 @@ export default function UnoGame() {
   // If we get here, game must exist
   if (!game) return null;
   
-  // CRITICAL: Calculate topCard early so validation functions can use it
-  const topCard = game.discardPile[game.discardPile.length - 1];
+  // CRITICAL: Use useMemo for topCard so validation functions always have current value
+  const topCard = React.useMemo(() => {
+    return game.discardPile[game.discardPile.length - 1];
+  }, [game.discardPile]);
+  
   const actualColor = topCard?.color === 'wild' ? game.currentColor : topCard?.color;
   
   // Player references
