@@ -18,22 +18,29 @@ export type Database = {
         Row: {
           created_at: string
           current_color: string
+          current_match_number: number
           current_player_index: number
           direction: number
           discard_pile: Json
           draw_count: number
           draw_pile: Json
+          eliminated_players: Json
           expanded_hand_player: string | null
+          final_winner_id: string | null
           game_state: string
           host_id: string
           id: string
           invite_code: string
           last_played_card: Json | null
+          match_scores: Json
           max_players: number
           pending_draw_total: number | null
           pending_draw_type: string | null
           pending_wild_card: Json | null
           play_history: Json
+          player_total_scores: Json
+          score_limit: number | null
+          scoring_enabled: boolean
           selected_cards: Json | null
           stacked_discard: Json | null
           stacking_timer: string | null
@@ -43,22 +50,29 @@ export type Database = {
         Insert: {
           created_at?: string
           current_color?: string
+          current_match_number?: number
           current_player_index?: number
           direction?: number
           discard_pile?: Json
           draw_count?: number
           draw_pile?: Json
+          eliminated_players?: Json
           expanded_hand_player?: string | null
+          final_winner_id?: string | null
           game_state?: string
           host_id: string
           id?: string
           invite_code: string
           last_played_card?: Json | null
+          match_scores?: Json
           max_players: number
           pending_draw_total?: number | null
           pending_draw_type?: string | null
           pending_wild_card?: Json | null
           play_history?: Json
+          player_total_scores?: Json
+          score_limit?: number | null
+          scoring_enabled?: boolean
           selected_cards?: Json | null
           stacked_discard?: Json | null
           stacking_timer?: string | null
@@ -68,22 +82,29 @@ export type Database = {
         Update: {
           created_at?: string
           current_color?: string
+          current_match_number?: number
           current_player_index?: number
           direction?: number
           discard_pile?: Json
           draw_count?: number
           draw_pile?: Json
+          eliminated_players?: Json
           expanded_hand_player?: string | null
+          final_winner_id?: string | null
           game_state?: string
           host_id?: string
           id?: string
           invite_code?: string
           last_played_card?: Json | null
+          match_scores?: Json
           max_players?: number
           pending_draw_total?: number | null
           pending_draw_type?: string | null
           pending_wild_card?: Json | null
           play_history?: Json
+          player_total_scores?: Json
+          score_limit?: number | null
+          scoring_enabled?: boolean
           selected_cards?: Json | null
           stacked_discard?: Json | null
           stacking_timer?: string | null

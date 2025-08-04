@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ArrowRight, Trophy, History, Copy, Check, ZoomIn, ZoomOut, Clock } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,13 @@ interface Game {
   pendingDrawType?: string;
   stackedDiscard: UnoCard[];
   expandedHandPlayer?: string;
+  scoringEnabled: boolean;
+  scoreLimit?: number;
+  matchScores: number[][];
+  playerTotalScores: Record<string, number>;
+  eliminatedPlayers: string[];
+  currentMatchNumber: number;
+  finalWinnerId?: string;
 }
 
 // Card generation
@@ -137,6 +145,24 @@ function validateUnoCards(data: any): UnoCard[] {
 function validateUnoCard(data: any): UnoCard | null {
   return isValidUnoCard(data) ? data : null;
 }
+function validateMatchScores(data: any): number[][] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(row => Array.isArray(row) && row.every(score => typeof score === 'number'));
+}
+function validatePlayerTotalScores(data: any): Record<string, number> {
+  if (!data || typeof data !== 'object') return {};
+  const result: Record<string, number> = {};
+  Object.keys(data).forEach(key => {
+    if (typeof data[key] === 'number') {
+      result[key] = data[key];
+    }
+  });
+  return result;
+}
+function validateEliminatedPlayers(data: any): string[] {
+  if (!Array.isArray(data)) return [];
+  return data.filter(id => typeof id === 'string');
+}
 function getColorClasses(color: CardColor): string {
   const baseClasses = "border-2";
   switch (color) {
@@ -212,6 +238,9 @@ export default function UnoGame() {
   const [drawTimer, setDrawTimer] = useState<number | null>(null);
   const [timerExpired, setTimerExpired] = useState(false);
   const [joinGameCode, setJoinGameCode] = useState('');
+  const [scoringEnabled, setScoringEnabled] = useState(false);
+  const [scoreLimit, setScoreLimit] = useState(300);
+  const [showScoreboard, setShowScoreboard] = useState(false);
   const {
     toast
   } = useToast();
@@ -370,6 +399,13 @@ export default function UnoGame() {
         pendingDrawType: gameData.pending_draw_type,
         stackedDiscard: validateUnoCards(gameData.stacked_discard),
         expandedHandPlayer: gameData.expanded_hand_player,
+        scoringEnabled: gameData.scoring_enabled || false,
+        scoreLimit: gameData.score_limit,
+        matchScores: validateMatchScores(gameData.match_scores),
+        playerTotalScores: validatePlayerTotalScores(gameData.player_total_scores),
+        eliminatedPlayers: validateEliminatedPlayers(gameData.eliminated_players),
+        currentMatchNumber: gameData.current_match_number || 1,
+        finalWinnerId: gameData.final_winner_id,
         players: playersData.map(p => ({
           id: p.player_id,
           name: p.name,
@@ -627,8 +663,8 @@ export default function UnoGame() {
         newPendingDrawTotal += drawAmount;
         newPendingDrawType = drawCards[0].type === 'draw2' ? 'draw2' : 'wild4';
 
-        // Set 5-second timer for next player to respond
-        newStackingTimer = new Date(Date.now() + 5000).toISOString();
+        // Set 6-second timer for next player to respond
+        newStackingTimer = new Date(Date.now() + 6000).toISOString();
       } else {
         // For all other cards, clear any pending draw state
         if (game.pendingDrawTotal > 0) {
@@ -862,6 +898,148 @@ export default function UnoGame() {
     
     return result;
   };
+
+  // Scoring system functions
+  const calculateCardPoints = (card: UnoCard): number => {
+    if (card.type === 'number') {
+      return card.value || 0;
+    }
+    if (card.type === 'skip' || card.type === 'reverse' || card.type === 'draw2') {
+      return 20;
+    }
+    if (card.type === 'wild' || card.type === 'wild4') {
+      return 50;
+    }
+    return 0;
+  };
+
+  const calculatePlayerScore = (hand: UnoCard[]): number => {
+    return hand.reduce((total, card) => total + calculateCardPoints(card), 0);
+  };
+
+  const handleMatchEnd = async (winnerId: string) => {
+    if (!game || !game.scoringEnabled) return;
+
+    try {
+      const matchScores: number[] = [];
+      const newPlayerTotalScores = { ...game.playerTotalScores };
+      const newEliminatedPlayers = [...game.eliminatedPlayers];
+
+      // Calculate scores for each non-winning player
+      game.players.forEach((player) => {
+        let score = 0;
+        if (player.id !== winnerId) {
+          score = calculatePlayerScore(player.hand);
+          
+          // If winner played draw cards as final cards, auto-draw for next player
+          const lastPlayedCards = game.selectedCards || [];
+          const hasDrawCards = lastPlayedCards.some(card => card.type === 'draw2' || card.type === 'wild4');
+          
+          if (hasDrawCards && game.scoringEnabled) {
+            // Find next player who would receive the draw
+            const seatedPlayers = getSeatedPlayers();
+            const winnerSeatedIndex = seatedPlayers.findIndex(p => p.id === winnerId);
+            const nextPlayerSeatedIndex = (winnerSeatedIndex + game.direction + seatedPlayers.length) % seatedPlayers.length;
+            const nextPlayer = seatedPlayers[nextPlayerSeatedIndex];
+            
+            if (player.id === nextPlayer?.id) {
+              // Auto-draw cards for scoring
+              const drawAmount = lastPlayedCards.reduce((sum, card) => {
+                return sum + (card.type === 'draw2' ? 2 : card.type === 'wild4' ? 4 : 0);
+              }, 0);
+              
+              const newDrawPile = [...game.drawPile];
+              const additionalCards: UnoCard[] = [];
+              for (let i = 0; i < drawAmount; i++) {
+                if (newDrawPile.length > 0) {
+                  additionalCards.push(newDrawPile.pop()!);
+                }
+              }
+              score += additionalCards.reduce((sum, card) => sum + calculateCardPoints(card), 0);
+            }
+          }
+        }
+        
+        matchScores.push(score);
+        newPlayerTotalScores[player.id] = (newPlayerTotalScores[player.id] || 0) + score;
+        
+        // Check if player should be eliminated
+        if (newPlayerTotalScores[player.id] >= (game.scoreLimit || 300) && !newEliminatedPlayers.includes(player.id)) {
+          newEliminatedPlayers.push(player.id);
+        }
+      });
+
+      // Update match scores
+      const newMatchScores = [...game.matchScores, matchScores];
+
+      // Check for final winner
+      const remainingPlayers = game.players.filter(p => !newEliminatedPlayers.includes(p.id));
+      const finalWinnerId = remainingPlayers.length === 1 ? remainingPlayers[0].id : null;
+
+      await supabase.from('games').update({
+        match_scores: newMatchScores as any,
+        player_total_scores: newPlayerTotalScores as any,
+        eliminated_players: newEliminatedPlayers as any,
+        final_winner_id: finalWinnerId,
+        game_state: finalWinnerId ? 'ended' : 'ended'
+      }).eq('id', game.id);
+
+    } catch (error) {
+      console.error('Error handling match end:', error);
+    }
+  };
+
+  const startNextMatch = async () => {
+    if (!game || !game.scoringEnabled) return;
+
+    try {
+      // Remove eliminated players from seating
+      const playersToRemove = game.eliminatedPlayers;
+      for (const playerId of playersToRemove) {
+        await supabase.from('players').update({
+          seated: false,
+          seated_position: null
+        }).eq('game_id', game.id).eq('player_id', playerId);
+      }
+
+      // Reset game state for next match
+      const deck = shuffleDeck(generateDeck());
+      const remainingSeatedPlayers = game.players.filter(p => !game.eliminatedPlayers.includes(p.id) && p.seated);
+      
+      // Deal new hands
+      for (const player of remainingSeatedPlayers) {
+        const playerHand = deck.splice(0, 7);
+        await supabase.from('players').update({
+          hand: playerHand as any
+        }).eq('game_id', game.id).eq('player_id', player.id);
+      }
+
+      const discardPile = [deck.pop()!];
+      
+      await supabase.from('games').update({
+        current_match_number: game.currentMatchNumber + 1,
+        current_player_index: 0,
+        direction: 1,
+        draw_pile: deck as any,
+        discard_pile: discardPile as any,
+        current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
+        game_state: 'playing',
+        winner_id: null,
+        selected_cards: [],
+        pending_draw_total: 0,
+        pending_draw_type: null,
+        stacking_timer: null,
+        play_history: [{
+          player: 'System',
+          action: `Match ${game.currentMatchNumber + 1} started`
+        }] as any
+      }).eq('id', game.id);
+
+    } catch (error) {
+      console.error('Error starting next match:', error);
+    }
+  };
+
   const handleColorSelect = (color: CardColor) => {
     setSelectedColor(color);
     setShowColorSelect(false);
@@ -1032,7 +1210,9 @@ export default function UnoGame() {
         draw_pile: deck as any,
         discard_pile: discardPile as any,
         current_color: discardPile[0].color === 'wild' ? 'red' : discardPile[0].color,
-        game_state: 'waiting'
+        game_state: 'waiting',
+        scoring_enabled: scoringEnabled,
+        score_limit: scoringEnabled ? scoreLimit : null
       }).select().single();
       if (gameError) throw gameError;
       await supabase.from('players').insert({
@@ -1467,6 +1647,18 @@ export default function UnoGame() {
               <Input id="playerName" value={playerName} onChange={e => setPlayerName(e.target.value)} placeholder="Enter your name" className="bg-gray-700 border-gray-600 text-white" />
             </div>
             
+            <div className="border-t border-gray-600 pt-4">
+              <Label htmlFor="joinCode" className="text-white">Join with Invite Code</Label>
+              <div className="flex space-x-2 mt-2">
+                <Input id="joinCode" value={joinGameCode} onChange={e => setJoinGameCode(e.target.value.toUpperCase())} placeholder="Enter invite code" className="bg-gray-700 border-gray-600 text-white" maxLength={6} />
+                <Button onClick={() => {
+                setInviteCode(joinGameCode);
+                setGameState('joining');
+              }} disabled={!joinGameCode.trim() || !playerName.trim()} size="sm">
+                  Join
+                </Button>
+              </div>
+            </div>
 
             <div className="text-sm text-gray-400 text-center mb-4">
               Up to 8 players can join your game
@@ -1481,15 +1673,23 @@ export default function UnoGame() {
             </Button>
 
             <div className="border-t border-gray-600 pt-4">
-              <Label htmlFor="joinCode" className="text-white">Join with Invite Code</Label>
-              <div className="flex space-x-2 mt-2">
-                <Input id="joinCode" value={joinGameCode} onChange={e => setJoinGameCode(e.target.value.toUpperCase())} placeholder="Enter invite code" className="bg-gray-700 border-gray-600 text-white" maxLength={6} />
-                <Button onClick={() => {
-                setInviteCode(joinGameCode);
-                setGameState('joining');
-              }} disabled={!joinGameCode.trim() || !playerName.trim()} size="sm">
-                  Join
-                </Button>
+              <div className="flex items-center space-x-2 mb-4">
+                <Checkbox 
+                  id="scoring" 
+                  checked={scoringEnabled} 
+                  onCheckedChange={(checked) => setScoringEnabled(checked === true)}
+                />
+                <Label htmlFor="scoring" className="text-white">Scoring</Label>
+                <Input 
+                  type="number" 
+                  value={scoreLimit} 
+                  onChange={(e) => setScoreLimit(parseInt(e.target.value) || 300)}
+                  disabled={!scoringEnabled}
+                  placeholder="Score Limit"
+                  className="w-24 bg-gray-700 border-gray-600 text-white disabled:opacity-50"
+                  min={100}
+                  max={1000}
+                />
               </div>
             </div>
           </CardContent>
