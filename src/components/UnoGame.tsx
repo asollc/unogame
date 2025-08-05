@@ -1204,7 +1204,7 @@ export default function UnoGame() {
       } = await supabase.from('games').insert({
         host_id: playerId,
         invite_code: gameCode,
-        max_players: 8,
+        max_players: 6,
         current_player_index: 0,
         direction: 1,
         draw_pile: deck as any,
