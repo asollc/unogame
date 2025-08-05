@@ -228,6 +228,7 @@ export default function UnoGame() {
   const [selectedColor, setSelectedColor] = useState<CardColor | null>(null);
   const [playerId] = useState(() => Math.random().toString(36).substring(7));
   const [showHistory, setShowHistory] = useState(false);
+  const [showScoreboard, setShowScoreboard] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [selectedCards, setSelectedCards] = useState<UnoCard[]>([]);
@@ -239,8 +240,7 @@ export default function UnoGame() {
   const [timerExpired, setTimerExpired] = useState(false);
   const [joinGameCode, setJoinGameCode] = useState('');
   const [scoringEnabled, setScoringEnabled] = useState(false);
-  const [scoreLimit, setScoreLimit] = useState(300);
-  const [showScoreboard, setShowScoreboard] = useState(false);
+  const [scoreLimit, setScoreLimit] = useState<number | null>(300);
   const {
     toast
   } = useToast();
@@ -1671,27 +1671,6 @@ export default function UnoGame() {
             <Button onClick={() => createGameWithBots()} className="w-full" disabled={!playerName.trim()} variant="outline">
               Play with Bots
             </Button>
-
-            <div className="border-t border-gray-600 pt-4">
-              <div className="flex items-center space-x-2 mb-4">
-                <Checkbox 
-                  id="scoring" 
-                  checked={scoringEnabled} 
-                  onCheckedChange={(checked) => setScoringEnabled(checked === true)}
-                />
-                <Label htmlFor="scoring" className="text-white">Scoring</Label>
-                <Input 
-                  type="number" 
-                  value={scoreLimit} 
-                  onChange={(e) => setScoreLimit(parseInt(e.target.value) || 300)}
-                  disabled={!scoringEnabled}
-                  placeholder="Score Limit"
-                  className="w-24 bg-gray-700 border-gray-600 text-white disabled:opacity-50"
-                  min={100}
-                  max={1000}
-                />
-              </div>
-            </div>
           </CardContent>
         </Card>
       </div>;
@@ -1724,6 +1703,11 @@ export default function UnoGame() {
   const renderGameEndOverlay = () => {
     if (gameState !== 'ended') return null;
     const winner = game?.players.find(p => p.id === game.winnerId);
+    
+    // Check if this is final winner in scoring mode
+    const isFinalWinner = game?.finalWinnerId && game.scoringEnabled;
+    const finalWinner = game?.players.find(p => p.id === game.finalWinnerId);
+    
     const newGame = async () => {
       if (!game) return;
       const deck = shuffleDeck(generateDeck());
@@ -1763,23 +1747,54 @@ export default function UnoGame() {
         expanded_hand_player: null
       }).eq('id', game.id);
     };
+    
     return <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
         {winner && <Confetti />}
-        <Card className="bg-gray-800 border-gray-700 text-center p-6">
+        <Card className="bg-gray-800 border-gray-700 text-center p-6 max-w-md">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <Trophy className="w-8 h-8 text-yellow-400" />
-            <h2 className="text-2xl font-bold text-white">Game Over!</h2>
+            <h2 className="text-2xl font-bold text-white">
+              {isFinalWinner ? 'Tournament Winner!' : 'Match Complete!'}
+            </h2>
           </div>
           <p className="text-xl text-white mb-4">
-            {winner?.name} wins!
+            {isFinalWinner ? `${finalWinner?.name} wins the tournament!` : `${winner?.name} wins this match!`}
           </p>
+          
+          {game?.scoringEnabled && (
+            <div className="mb-4">
+              <Button 
+                onClick={() => setShowScoreboard(true)} 
+                variant="outline" 
+                className="mb-2"
+              >
+                <Trophy className="w-4 h-4 mr-2" />
+                View Scoreboard
+              </Button>
+            </div>
+          )}
+          
           <div className="flex space-x-2">
-            <Button onClick={newGame} className="flex-1">
-              Play Again
-            </Button>
-            <Button onClick={() => setGameState('lobby')} variant="outline" className="flex-1">
-              New Game
-            </Button>
+            {myPlayer?.isHost ? (
+              <>
+                {!isFinalWinner && game?.scoringEnabled ? (
+                  <Button onClick={startNextMatch} className="flex-1">
+                    Next Match
+                  </Button>
+                ) : (
+                  <Button onClick={newGame} className="flex-1">
+                    Play Again
+                  </Button>
+                )}
+                <Button onClick={() => setGameState('lobby')} variant="outline" className="flex-1">
+                  New Game
+                </Button>
+              </>
+            ) : (
+              <div className="text-gray-400 text-sm">
+                Waiting for host to continue...
+              </div>
+            )}
           </div>
         </Card>
       </div>;
@@ -1840,8 +1855,16 @@ export default function UnoGame() {
         {/* Timer and actions */}
         <div className="flex items-center space-x-1 sm:space-x-2">
           <Button onClick={() => setShowHistory(!showHistory)} variant="outline" size="sm">
+            <History className="w-4 h-4 mr-1" />
             History
           </Button>
+          
+          {game?.scoringEnabled && (
+            <Button onClick={() => setShowScoreboard(!showScoreboard)} variant="outline" size="sm">
+              <Trophy className="w-4 h-4 mr-1" />
+              Scoreboard
+            </Button>
+          )}
           
           {gameState === 'waiting' && myPlayer?.isHost && <Button onClick={startGame} size="sm" disabled={game.players.length < 2}>
               Start Game
@@ -1865,7 +1888,38 @@ export default function UnoGame() {
       {/* Seating UI */}
       {gameState === 'seating' && (
         <div className="p-4 bg-gray-800 mx-4 rounded-lg mb-4">
-          <h3 className="text-white text-lg font-bold mb-3 text-center">Seat Players</h3>
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-white text-lg font-bold">Seat Players</h3>
+            {myPlayer?.isHost && (
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="scoring" 
+                  checked={scoringEnabled} 
+                  onCheckedChange={(checked) => setScoringEnabled(checked === true)}
+                />
+                <Label htmlFor="scoring" className="text-white">Scoring</Label>
+                <Input 
+                  type="number" 
+                  value={scoreLimit || ""} 
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === "") {
+                      setScoreLimit(null);
+                    } else {
+                      const num = parseInt(value);
+                      if (num >= 50) {
+                        setScoreLimit(num);
+                      }
+                    }
+                  }}
+                  disabled={!scoringEnabled}
+                  placeholder="Score Limit (min 50)"
+                  className="w-32 bg-gray-700 border-gray-600 text-white disabled:opacity-50"
+                  min={50}
+                />
+              </div>
+            )}
+          </div>
           {/* Unseated Players */}
           <div className="mb-4">
             <p className="text-white text-sm mb-2">Available Players:</p>
@@ -1999,11 +2053,19 @@ export default function UnoGame() {
 
         {/* Player hand view - improved layout with no overlap */}
         {myPlayer && <div className="absolute bottom-2 left-4 right-4 z-20">
-            <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mx-auto" style={{
-          maxWidth: 'calc(100vw - 2rem)'
-        }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-white font-bold text-sm">{myPlayer.name} ({myPlayer.hand.length} cards)</span>
+            {game?.eliminatedPlayers.includes(myPlayer.id) ? (
+              <div className="bg-red-900 border border-red-600 rounded-lg p-4 mx-auto text-center" style={{
+                maxWidth: 'calc(100vw - 2rem)'
+              }}>
+                <div className="text-red-200 font-bold text-lg mb-2">You have been eliminated!</div>
+                <div className="text-red-300 text-sm">You can continue watching the game</div>
+              </div>
+            ) : (
+              <div className="bg-gray-800 border border-gray-600 rounded-lg p-3 mx-auto" style={{
+                maxWidth: 'calc(100vw - 2rem)'
+              }}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-white font-bold text-sm">{myPlayer.name} ({myPlayer.hand.length} cards)</span>
                 <div className="flex items-center space-x-2">
                   <button onClick={sortHand} className="p-1 bg-gray-700 rounded text-white hover:bg-gray-600 text-xs">
                     Sort
@@ -2039,8 +2101,9 @@ export default function UnoGame() {
                         {renderCard(card, index, undefined, false, isSelected)}
                       </div>;
             })}
-                </div>}
-            </div>
+                 </div>}
+              </div>
+            )}
           </div>}
         
         {/* Show expanded hand for other players */}
@@ -2091,5 +2154,64 @@ export default function UnoGame() {
             </div>
           </div>
         </div>}
+
+      {/* Scoreboard Modal */}
+      {showScoreboard && game?.scoringEnabled && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-lg p-4 max-w-4xl w-full max-h-96 overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold text-white">Scoreboard</h3>
+              <Button onClick={() => setShowScoreboard(false)} variant="outline" size="sm">
+                Close
+              </Button>
+            </div>
+            <div className="mb-4 text-center">
+              <span className="text-white font-bold">Score Limit: {game.scoreLimit}</span>
+              <span className="text-gray-400 ml-4">Match {game.currentMatchNumber}</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-white">
+                <thead>
+                  <tr className="border-b border-gray-600">
+                    <th className="text-left p-2">Player</th>
+                    {Array.from({ length: game.currentMatchNumber }, (_, i) => (
+                      <th key={i} className="text-center p-2">Match {i + 1}</th>
+                    ))}
+                    <th className="text-center p-2 font-bold">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {game.players.map(player => {
+                    const isEliminated = game.eliminatedPlayers.includes(player.id);
+                    const totalScore = game.playerTotalScores[player.id] || 0;
+                    return (
+                      <tr key={player.id} className={`border-b border-gray-700 ${isEliminated ? 'bg-red-900/30' : ''}`}>
+                        <td className="p-2">
+                          {player.name} {player.isHost && '(Host)'}
+                          {isEliminated && <span className="text-red-400 ml-2">(Eliminated)</span>}
+                          {game.finalWinnerId === player.id && <span className="text-yellow-400 ml-2">🏆 WINNER</span>}
+                        </td>
+                        {Array.from({ length: game.currentMatchNumber }, (_, matchIndex) => {
+                          const matchScore = game.matchScores[matchIndex]?.find((_, playerIndex) => 
+                            game.players[playerIndex]?.id === player.id
+                          );
+                          return (
+                            <td key={matchIndex} className="text-center p-2">
+                              {matchScore !== undefined ? matchScore : '-'}
+                            </td>
+                          );
+                        })}
+                        <td className={`text-center p-2 font-bold ${totalScore >= (game.scoreLimit || 300) ? 'text-red-400' : 'text-white'}`}>
+                          {totalScore}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>;
 }
