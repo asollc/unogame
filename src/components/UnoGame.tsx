@@ -224,7 +224,7 @@ export default function UnoGame() {
   const [gameState, setGameState] = useState<GameState>('lobby');
   const [game, setGame] = useState<Game | null>(null);
   const [playerName, setPlayerName] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [maxPlayers, setMaxPlayers] = useState(8);
   const [selectedColor, setSelectedColor] = useState<CardColor | null>(null);
   const [playerId] = useState(() => Math.random().toString(36).substring(7));
   const [showHistory, setShowHistory] = useState(false);
@@ -466,14 +466,6 @@ export default function UnoGame() {
       return;
     }
 
-    // Handle deselection first - check if card is already selected
-    const isAlreadySelected = selectedCards.some(c => c.id === card.id);
-    if (isAlreadySelected) {
-      console.log('🔄 Deselecting card:', `${card.color} ${card.value || card.type}`);
-      setSelectedCards(prev => prev.filter(c => c.id !== card.id));
-      return;
-    }
-
     // Check draw response mode first
     const inDrawResponseMode = game.pendingDrawTotal > 0 && game.pendingDrawType;
     if (inDrawResponseMode) {
@@ -486,6 +478,25 @@ export default function UnoGame() {
         });
         return;
       }
+    } else {
+      // Normal play mode - validate card can be played
+      if (!canPlayCard(card)) {
+        console.log('❌ Invalid card for normal play');
+        toast({
+          title: "Invalid card",
+          description: "This card cannot be played on the current discard pile",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
+    // Handle deselection - check if card is already selected AFTER validation
+    const isAlreadySelected = selectedCards.some(c => c.id === card.id);
+    if (isAlreadySelected) {
+      console.log('🔄 Deselecting card:', `${card.color} ${card.value || card.type}`);
+      setSelectedCards(prev => prev.filter(c => c.id !== card.id));
+      return;
     }
 
     // CRITICAL: Single validation point - validate card can be played
@@ -840,7 +851,9 @@ export default function UnoGame() {
         case 'reverse':
           newDirection *= -1;
           if (seatedPlayers.length === 2) {
-            skipCount += 1; // In 2-player games, reverse acts as skip
+            // In 2-player games, reverse acts as skip
+            // Do NOT skip the current player who played the reverse card
+            skipCount += 1;
           }
           break;
         case 'skip':
@@ -859,10 +872,14 @@ export default function UnoGame() {
     nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     
     // Then skip additional players based on skip count
+    // CRITICAL: Skip/reverse cards should NOT skip the player who played them
     for (let i = 0; i < skipCount; i++) {
       const skippedPlayer = seatedPlayers[nextSeatedIndex];
       if (skippedPlayer) {
-        skippedPlayers.push(skippedPlayer.name);
+        // Only add to skipped players if it's not the current player who played the card
+        if (skippedPlayer.id !== seatedPlayers[currentSeatedIndex].id) {
+          skippedPlayers.push(skippedPlayer.name);
+        }
       }
       nextSeatedIndex = (nextSeatedIndex + newDirection + seatedPlayers.length) % seatedPlayers.length;
     }
@@ -1204,7 +1221,7 @@ export default function UnoGame() {
       } = await supabase.from('games').insert({
         host_id: playerId,
         invite_code: gameCode,
-        max_players: 6,
+        max_players: maxPlayers,
         current_player_index: 0,
         direction: 1,
         draw_pile: deck as any,
@@ -1660,8 +1677,22 @@ export default function UnoGame() {
               </div>
             </div>
 
-            <div className="text-sm text-gray-400 text-center mb-4">
-              Up to 8 players can join your game
+            <div>
+              <Label htmlFor="maxPlayers" className="text-white">Number of Players</Label>
+              <Select value={maxPlayers.toString()} onValueChange={(value) => setMaxPlayers(parseInt(value))}>
+                <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 Players</SelectItem>
+                  <SelectItem value="3">3 Players</SelectItem>
+                  <SelectItem value="4">4 Players</SelectItem>
+                  <SelectItem value="5">5 Players</SelectItem>
+                  <SelectItem value="6">6 Players</SelectItem>
+                  <SelectItem value="7">7 Players</SelectItem>
+                  <SelectItem value="8">8 Players</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             <Button onClick={createGame} disabled={!playerName.trim()} className="w-full bg-[#09fd09] rounded-md text-slate-50 text-base">
